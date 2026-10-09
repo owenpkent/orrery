@@ -13,6 +13,7 @@ import { GREGORIAN_MONTHS, jdnToGregorian, todayJDN } from '../calendars/jdn';
 import { getState, setDate, subscribe } from '../state';
 import { describeGregorian } from '../ui/dateControl';
 import { clear, h, repeatButton } from '../ui/dom';
+import { setText } from '../ui/fx';
 import { formatDateTimeUtc } from '../ui/format';
 
 function shortGregorian(jdn: number): string {
@@ -27,25 +28,38 @@ function gregorianCaption(jdn: number): string {
 }
 
 export function mountOrreryCalendar(root: HTMLElement): () => void {
-  const detail = h('div', { class: 'panel orr-detail', 'aria-live': 'polite' });
+  const detail = h('div', { class: 'panel glass orr-detail', 'aria-live': 'polite' });
   let hoverJdn: number | null = null;
   let lastYear = -1;
 
-  const yearNum = h('strong', {});
+  const yearNum = h('strong', { class: 'orr-yearnum display' });
+  const lenBadge = h('span', { class: 'len-badge num' });
   const facts = h('ul', { class: 'orr-facts' });
   const header = h(
     'section',
-    { class: 'panel orr-header' },
+    { class: 'panel glass orr-header', 'data-reveal': '', 'data-i': '1' },
     h(
       'div',
       { class: 'orr-year-row' },
-      repeatButton('<', 'Previous Orrery year', () =>
-        setDate(orreryYearStart(orreryDate(getState().jdn).year - 1)),
+      repeatButton(
+        '‹',
+        'Previous Orrery year',
+        () => setDate(orreryYearStart(orreryDate(getState().jdn).year - 1)),
+        'btn round',
       ),
-      h('div', { class: 'orr-year' }, h('span', { class: 'muted' }, 'Orrery year'), yearNum),
-      repeatButton('>', 'Next Orrery year', () =>
-        setDate(orreryYearStart(orreryDate(getState().jdn).year + 1)),
+      h(
+        'div',
+        { class: 'orr-year' },
+        h('span', { class: 'eyebrow' }, 'Orrery year'),
+        h('div', { class: 'orr-year-line' }, yearNum, lenBadge),
       ),
+      repeatButton(
+        '›',
+        'Next Orrery year',
+        () => setDate(orreryYearStart(orreryDate(getState().jdn).year + 1)),
+        'btn round',
+      ),
+      h('span', { class: 'orr-spacer' }),
       h(
         'button',
         { type: 'button', class: 'btn', onclick: () => setDate(todayJDN()) },
@@ -101,7 +115,9 @@ export function mountOrreryCalendar(root: HTMLElement): () => void {
     const stats = orreryYearStats(year);
 
     // Header (the stepper row is built once so hold-to-repeat survives re-renders)
-    yearNum.textContent = String(year);
+    setText(yearNum, String(year));
+    setText(lenBadge, `${len} days`);
+    lenBadge.classList.toggle('long', len === 366);
     clear(facts);
     facts.append(
       h(
@@ -158,14 +174,18 @@ export function mountOrreryCalendar(root: HTMLElement): () => void {
       grid.append(
         h(
           'section',
-          { class: `orr-month${festival ? ' festival' : ''}` },
+          {
+            class: `orr-month glass${festival ? ' festival' : ''}`,
+            style: festival ? '--fam:var(--gold)' : '--fam:var(--c-invented)',
+          },
           h(
             'h3',
             {},
-            orreryMonthName(m),
+            h('span', { class: 'mname' }, orreryMonthName(m)),
+            festival ? h('span', { class: 'fest-tag' }, '✦ festival') : null,
             h(
               'span',
-              { class: 'muted' },
+              { class: 'muted mrange num' },
               ` ${shortGregorian(first)} to ${shortGregorian(first + days - 1)}`,
             ),
           ),
@@ -218,9 +238,16 @@ export function mountOrreryCalendar(root: HTMLElement): () => void {
       'div',
       { class: 'orrery-cal-view' },
       h(
+        'h1',
+        { class: 'view-title', 'data-reveal': '' },
+        'The ',
+        h('em', {}, 'Orrery'),
+        ' calendar.',
+      ),
+      h(
         'p',
-        { class: 'view-intro' },
-        '12 months of 30 days in locked 10-day weeks, then a short festival month. Filled squares are workdays (days 1 to 6 of each week); hatched squares are days off.',
+        { class: 'view-intro', 'data-reveal': '', 'data-i': '1' },
+        '12 months of 30 days in locked 10-day weeks, then a short festival month. Softly lit tiles are workdays (days 1 to 6 of each week); the quiet, cool tiles are days off.',
       ),
       header,
       h('div', { class: 'orr-main' }, grid, h('aside', { class: 'orr-side' }, detail, lengths)),

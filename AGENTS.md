@@ -27,8 +27,13 @@ src/calendars/   one file per calendar, types.ts (the contract), index.ts (regis
   intl.ts        the single Intl.DateTimeFormat adapter used by the Intl-backed calendars
   orrery.ts, orrery-config.ts   the invented calendar and every tunable choice in it
 src/sky/         astronomy-engine wrapper with a per-year event cache
-src/views/       today.ts, timeline.ts, ring.ts, orreryCalendar.ts (one per tab)
-src/ui/          dom helpers, the shared date control, formatting
+src/views/       home.ts, today.ts, timeline.ts, ring.ts, orreryCalendar.ts (one per tab)
+src/scene/       orreryScene.ts, the three.js hero scene; imported only via dynamic import from home.ts
+src/styles/      tokens.css (every design token, dark default + light), base.css (glass, buttons),
+                 shell.css (nav pill, date dock, atmosphere), one css file per view
+src/ui/          dom helpers, the shared date control (a fixed glass dock), formatting, fx.ts (spotlight,
+                 reveals, text-swap animation, view transitions, tween; all honour reduced motion)
+src/sky/orbit.ts Earth's orbital angle helpers shared by the hero scene and the ring view
 src/state.ts     selected day (JDN) + current view, mirrored to the URL hash
 tests/           pure logic, runs under Node with no DOM
 docs/            CALENDARS.md (every calendar), ORRERY_CALENDAR.md (the spec)
@@ -40,7 +45,8 @@ docs/            CALENDARS.md (every calendar), ORRERY_CALENDAR.md (the spec)
    parentheses or a full stop.
 2. **Mouse-first UI.** Nothing may require typing. Every action needs a button, slider or click
    target of at least 44px, and must also work from the keyboard. Keep light and dark themes working
-   (tokens are CSS variables in `src/styles.css`).
+   (tokens are CSS variables in `src/styles/tokens.css`). Earth can be dragged by mouse in the hero
+   and the ring view; both also expose a keyboard slider.
 3. **JDN is the pivot.** A calendar converts from the integer JDN of a UTC civil day (2000-01-01 is
    2451545). Do not pass `Date` objects between modules.
 4. **Docs stay true.** Changing a calendar's algorithm, epoch or limits means editing
@@ -71,7 +77,8 @@ CH="/c/Program Files/Google/Chrome/Application/chrome.exe"
   "http://localhost:4173/orrery/#/timeline?d=2026-10-09"
 ```
 
-Views are `#/today`, `#/timeline`, `#/ring`, `#/orrery`; `d=YYYY-MM-DD` sets the selected day. Read
+For WebGL in headless Chrome add `--use-angle=swiftshader --enable-unsafe-swiftshader`. Views are
+`#/home` (default), `#/today`, `#/timeline`, `#/ring`, `#/orrery`; `d=YYYY-MM-DD` sets the selected day. Read
 the PNG to check it. Note that `vite preview` serves under `/orrery/` (the Pages base), so a URL
 without that prefix returns the HTML for scripts and renders a blank page. For hover, wheel or
 colour-scheme checks, drive Chrome over the DevTools protocol (`--remote-debugging-port`, then
