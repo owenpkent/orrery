@@ -1,0 +1,373 @@
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.mono-sub {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  color: var(--muted);
+  display: block;
+}
+
+/* ---- sky panel ---- */
+.sky {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) 1fr;
+  gap: 28px 40px;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 28px 32px;
+  --fam: var(--ev-moon);
+}
+
+.moon-block {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.moon-wrap {
+  width: 128px;
+  height: 128px;
+  flex: none;
+  filter: drop-shadow(0 0 22px rgba(188, 208, 255, 0.28));
+}
+
+.moon-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.moon-name {
+  display: block;
+  font-size: clamp(2rem, 3.6vw, 2.8rem);
+  margin: 8px 0 4px;
+}
+
+.moon-lit-text {
+  display: inline-block;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.cd-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.cd {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  padding: 14px 16px 12px;
+  border-radius: var(--r-md);
+  background: var(--tile);
+  border: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+
+.cd::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--fam);
+  box-shadow: 0 0 14px var(--fam);
+}
+
+.cd-title {
+  font: 500 11px/1.3 var(--font-ui);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.cd-big {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-height: 2.6rem;
+}
+
+.cd-num {
+  display: inline-block;
+  font-size: 2.3rem;
+  font-weight: 500;
+  letter-spacing: -0.06em;
+  line-height: 1.1;
+}
+
+.cd-unit {
+  display: inline-block;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.cd-what {
+  display: inline-block;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.cd-when {
+  display: inline-block;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+/* ---- calendar bento ---- */
+.concord {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  grid-auto-flow: dense;
+  gap: 14px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 20px 22px;
+  overflow: hidden;
+  border-radius: var(--r-md);
+  transition:
+    transform 0.6s var(--ease),
+    opacity 0.9s var(--ease);
+}
+
+.card:hover {
+  transform: translateY(-3px);
+}
+
+.card > .card-name,
+.card > .card-label,
+.card > .card-extra {
+  position: relative;
+  z-index: 1;
+}
+
+.card::before {
+  border-radius: inherit;
+}
+
+/* family glow, bleeding in from the top corner */
+.card > .card-head::after {
+  content: '';
+  position: absolute;
+  right: -70px;
+  top: -70px;
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--fam) 26%, transparent),
+    transparent 66%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.c-xl {
+  grid-column: span 7;
+  padding: 30px 34px;
+  border-radius: var(--r-lg);
+  background:
+    radial-gradient(
+      120% 90% at 100% 0%,
+      color-mix(in srgb, var(--fam) 20%, transparent),
+      transparent 60%
+    ),
+    var(--glass);
+}
+.c-lg {
+  grid-column: span 5;
+  padding: 30px 34px;
+  border-radius: var(--r-lg);
+}
+.c-md {
+  grid-column: span 4;
+}
+.c-sm {
+  grid-column: span 3;
+}
+.c-wide {
+  grid-column: span 6;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.fam-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font: 600 10.5px/1 var(--font-ui);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--fam);
+  position: relative;
+  z-index: 1;
+}
+
+.fam-tag i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--fam);
+  box-shadow: 0 0 10px 1px var(--fam);
+}
+
+.card-region {
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-align: right;
+  position: relative;
+  z-index: 1;
+}
+
+.card-name {
+  font: 500 0.92rem/1.3 var(--font-ui);
+  color: var(--text-soft);
+}
+
+.card-label {
+  font-family: var(--font-display);
+  font-size: 1.9rem;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  margin: 4px 0 2px;
+  text-wrap: balance;
+}
+
+.c-md .card-label {
+  font-size: 2.15rem;
+}
+
+.c-xl .card-label {
+  font-size: clamp(2.8rem, 5.4vw, 4.8rem);
+  line-height: 1;
+  margin: 10px 0 8px;
+}
+
+.c-lg .card-label {
+  font-size: clamp(2.4rem, 4.4vw, 3.8rem);
+  line-height: 1;
+  margin: 10px 0 8px;
+}
+
+.c-wide .card-label {
+  font-family: var(--font-mono);
+  font-size: clamp(1.4rem, 2.6vw, 2rem);
+  letter-spacing: -0.05em;
+}
+
+.card-label,
+.card-extra,
+.card-weekday {
+  display: block;
+}
+
+.card-extra {
+  font-size: 0.82rem;
+  color: var(--text-soft);
+}
+
+.card-weekday {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.card details {
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.card summary {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  font: 500 0.75rem/1 var(--font-ui);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.card summary:hover {
+  color: var(--text);
+}
+
+.blurb {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--text-soft);
+  margin-top: auto;
+  padding-top: 12px;
+  max-width: 60ch;
+}
+
+.card details .blurb {
+  padding-top: 4px;
+}
+
+@media (max-width: 1100px) {
+  .sky {
+    grid-template-columns: 1fr;
+  }
+  .c-xl,
+  .c-lg {
+    grid-column: span 12;
+  }
+  .c-md {
+    grid-column: span 6;
+  }
+  .c-sm {
+    grid-column: span 4;
+  }
+  .c-wide {
+    grid-column: span 12;
+  }
+}
+
+@media (max-width: 700px) {
+  .sky {
+    padding: 22px 18px;
+  }
+  .cd-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .concord {
+    gap: 10px;
+  }
+  .c-md,
+  .c-sm,
+  .c-wide {
+    grid-column: span 12;
+  }
+  .c-sm,
+  .c-md {
+    padding: 18px;
+  }
+  .c-xl,
+  .c-lg {
+    padding: 22px;
+  }
+}

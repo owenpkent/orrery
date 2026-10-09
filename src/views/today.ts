@@ -1,8 +1,7 @@
 /** Today / Concordance: the chosen date in every calendar, plus the nearby sky. */
-import { CALENDARS, FAMILY_LABEL, FAMILY_ORDER } from '../calendars';
+import { CALENDARS, FAMILY_LABEL, FAMILY_ORDER, type Calendar } from '../calendars';
 import { MS_PER_DAY, UNIX_EPOCH_JDN } from '../calendars/jdn';
 import {
-  KIND_LABEL,
   SEASON_KINDS,
   adjacentEvent,
   moonStateAt,
@@ -10,143 +9,238 @@ import {
   type SkyKind,
 } from '../sky/events';
 import { getState, subscribe } from '../state';
+import { describeGregorian } from '../ui/dateControl';
 import { clear, h } from '../ui/dom';
-import { FAMILY_VAR, formatDateTimeUtc, relativeDays } from '../ui/format';
+import { setText } from '../ui/fx';
+import { FAMILY_VAR, formatDateTimeUtc } from '../ui/format';
 
 const NS = 'http://www.w3.org/2000/svg';
 
-/** Draw the moon disc for a phase angle (0 new, 180 full). */
-function moonSvg(angle: number): SVGSVGElement {
-  const r = 22;
-  const svg = document.createElementNS(NS, 'svg');
-  svg.setAttribute('viewBox', '-26 -26 52 52');
-  svg.setAttribute('width', '64');
-  svg.setAttribute('height', '64');
-  svg.setAttribute('role', 'img');
-  svg.setAttribute('aria-label', 'Moon phase');
-  const dark = document.createElementNS(NS, 'circle');
-  dark.setAttribute('r', String(r));
-  dark.setAttribute('class', 'moon-dark');
-  svg.append(dark);
-  const waxing = angle < 180;
-  const a = (angle * Math.PI) / 180;
-  const rx = Math.abs(Math.cos(a)) * r;
-  const crescent = Math.cos(a) > 0;
-  const sweep = crescent ? 0 : 1;
-  const lit = document.createElementNS(NS, 'path');
-  lit.setAttribute('d', `M0 ${-r} A${r} ${r} 0 0 1 0 ${r} A${rx} ${r} 0 0 ${sweep} 0 ${-r} Z`);
-  lit.setAttribute('class', 'moon-lit');
-  if (!waxing) lit.setAttribute('transform', 'scale(-1 1)');
-  svg.append(lit);
-  const ring = document.createElementNS(NS, 'circle');
-  ring.setAttribute('r', String(r));
-  ring.setAttribute('class', 'moon-ring');
-  svg.append(ring);
-  return svg;
+const MEDIUM = new Set([
+  'hebrew',
+  'islamic-umalqura',
+  'chinese',
+  'maya',
+  'persian',
+  'french-republican',
+]);
+
+function sizeOf(c: Calendar): 'xl' | 'lg' | 'md' | 'wide' | 'sm' {
+  if (c.id === 'orrery') return 'xl';
+  if (c.id === 'gregorian') return 'lg';
+  if (MEDIUM.has(c.id)) return 'md';
+  if (c.family === 'count') return 'wide';
+  return 'sm';
 }
 
-function eventRow(label: string, ev: SkyEvent | undefined, jdn: number): HTMLElement {
-  return h(
-    'li',
-    {},
-    h('span', { class: 'ev-label' }, label),
-    ev
-      ? h(
-          'span',
-          { class: 'ev-value' },
-          h('strong', {}, ev.label),
-          h(
-            'span',
-            { class: 'muted' },
-            ` ${formatDateTimeUtc(ev.time)} (${relativeDays(ev.time, jdn)})`,
-          ),
-        )
-      : h('span', { class: 'muted' }, 'none found'),
+function svg(tag: string, attrs: Record<string, string>): SVGElement {
+  const el = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  return el;
+}
+
+/** A rendered moon: dark disc, lit phase with soft limb shading, and a halo scaled to illumination. */
+function createMoon(): { el: SVGSVGElement; set(angle: number, lit: number): void } {
+  const r = 50;
+  const el = svg('svg', {
+    viewBox: '-64 -64 128 128',
+    class: 'moon-svg',
+    role: 'img',
+    'aria-label': 'Moon phase',
+  }) as SVGSVGElement;
+  const defs = svg('defs', {});
+  defs.innerHTML = `
+    <radialGradient id="moon-lit" cx="38%" cy="34%" r="80%">
+      <stop offset="0" stop-color="#fffaf0"/><stop offset=".55" stop-color="#e6e2d8"/><stop offset="1" stop-color="#a9a7a8"/>
+    </radialGradient>
+    <radialGradient id="moon-dark" cx="50%" cy="50%" r="60%">
+      <stop offset="0" stop-color="#1a2038"/><stop offset="1" stop-color="#0b0f1f"/>
+    </radialGradient>
+    <radialGradient id="moon-halo" cx="50%" cy="50%" r="50%">
+      <stop offset=".6" stop-color="#bcd0ff" stop-opacity=".5"/><stop offset="1" stop-color="#bcd0ff" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="moon-clip"><circle r="${r}"/></clipPath>
+    <clipPath id="moon-litclip"><path id="moon-litclip-path"/></clipPath>`;
+  const halo = svg('circle', { r: '63', fill: 'url(#moon-halo)', class: 'moon-halo' });
+  const dark = svg('circle', { r: String(r), fill: 'url(#moon-dark)' });
+  const g = svg('g', { 'clip-path': 'url(#moon-clip)' });
+  const lit = svg('path', { fill: 'url(#moon-lit)' });
+  const craters = svg('g', { fill: '#6c6a70', opacity: '0.3', 'clip-path': 'url(#moon-litclip)' });
+  for (const [x, y, cr] of [
+    [-16, -14, 9],
+    [14, 6, 12],
+    [-8, 22, 6],
+    [24, -22, 5],
+    [-28, 8, 5],
+    [4, -28, 4],
+  ])
+    craters.append(svg('circle', { cx: String(x), cy: String(y), r: String(cr) }));
+  const ring = svg('circle', { r: String(r), fill: 'none', stroke: 'rgba(255,255,255,.18)' });
+  const litWrap = svg('g', {});
+  litWrap.append(lit, craters);
+  g.append(litWrap);
+  el.append(defs, halo, dark, g, ring);
+  return {
+    el,
+    set(angle, frac) {
+      const a = (angle * Math.PI) / 180;
+      const rx = Math.abs(Math.cos(a)) * r;
+      const crescent = Math.cos(a) > 0;
+      const d = `M0 ${-r} A${r} ${r} 0 0 1 0 ${r} A${rx} ${r} 0 0 ${crescent ? 0 : 1} 0 ${-r} Z`;
+      lit.setAttribute('d', d);
+      defs.querySelector('#moon-litclip-path')?.setAttribute('d', d);
+      litWrap.setAttribute('transform', angle < 180 ? '' : 'scale(-1 1)');
+      halo.setAttribute('opacity', (0.15 + frac * 0.85).toFixed(2));
+    },
+  };
+}
+
+interface Cd {
+  title: string;
+  kinds: SkyKind[];
+  tint: string;
+  num: HTMLElement;
+  unit: HTMLElement;
+  what: HTMLElement;
+  when: HTMLElement;
+  el: HTMLElement;
+}
+
+function countdown(title: string, kinds: SkyKind[], tint: string): Cd {
+  const num = h('span', { class: 'cd-num num' });
+  const unit = h('span', { class: 'cd-unit' });
+  const what = h('span', { class: 'cd-what' });
+  const when = h('span', { class: 'cd-when num' });
+  const el = h(
+    'div',
+    { class: 'cd', style: `--fam:${tint}` },
+    h('span', { class: 'cd-title' }, title),
+    h('div', { class: 'cd-big' }, num, unit),
+    what,
+    when,
   );
+  return { title, kinds, tint, num, unit, what, when, el };
 }
 
 export function mountToday(root: HTMLElement): () => void {
+  const title = h(
+    'h1',
+    { class: 'view-title', 'data-reveal': '' },
+    'This day, in ',
+    h('em', {}, 'every'),
+    ' calendar.',
+  );
+  const sub = h('p', { class: 'view-intro mono-sub', 'data-reveal': '', 'data-i': '1' });
+
+  // ---- sky panel ----
+  const moon = createMoon();
+  const moonName = h('div', { class: 'moon-name display' });
+  const moonLit = h('div', { class: 'moon-lit-text num' });
+  const cds = [
+    countdown('Next solstice or equinox', [...SEASON_KINDS], 'var(--ev-season)'),
+    countdown('Next full moon', ['full_moon'], 'var(--ev-moon)'),
+    countdown('Next new moon', ['new_moon'], 'var(--ev-quarter)'),
+    countdown('Next lunar eclipse', ['lunar_eclipse'], 'var(--ev-eclipse)'),
+    countdown('Next solar eclipse', ['solar_eclipse'], 'var(--ev-eclipse)'),
+    countdown('Next perihelion or aphelion', ['perihelion', 'aphelion'], 'var(--ev-apsis)'),
+  ];
+  const sky = h(
+    'section',
+    { class: 'panel glass sky', 'aria-labelledby': 'sky-h', 'data-reveal': '', 'data-i': '2' },
+    h('h2', { id: 'sky-h', class: 'sr-only' }, 'The sky on this date'),
+    h(
+      'div',
+      { class: 'moon-block' },
+      h('div', { class: 'moon-wrap' }, moon.el),
+      h('div', {}, h('span', { class: 'eyebrow' }, 'Moon at 12:00 UTC'), moonName, moonLit),
+    ),
+    h('div', { class: 'cd-grid' }, ...cds.map((c) => c.el)),
+  );
+
+  // ---- calendar cards ----
+  const grid = h('div', { class: 'concord' });
+  const cards = new Map<
+    string,
+    { cal: Calendar; label: HTMLElement; extra: HTMLElement; weekday: HTMLElement }
+  >();
+  const ordered = [...CALENDARS].sort(
+    (a, b) =>
+      ['xl', 'lg', 'md', 'wide', 'sm'].indexOf(sizeOf(a)) -
+        ['xl', 'lg', 'md', 'wide', 'sm'].indexOf(sizeOf(b)) ||
+      FAMILY_ORDER.indexOf(a.family) - FAMILY_ORDER.indexOf(b.family),
+  );
+  ordered.forEach((cal, i) => {
+    const size = sizeOf(cal);
+    const label = h('div', { class: 'card-label' });
+    const extra = h('div', { class: 'card-extra num' });
+    const weekday = h('div', { class: 'card-weekday' });
+    cards.set(cal.id, { cal, label, extra, weekday });
+    const info =
+      size === 'xl' || size === 'lg'
+        ? h('p', { class: 'blurb' }, cal.blurb)
+        : h('details', {}, h('summary', {}, 'About'), h('p', { class: 'blurb' }, cal.blurb));
+    grid.append(
+      h(
+        'article',
+        {
+          class: `card glass c-${size} fam-${cal.family}`,
+          style: `--fam:${FAMILY_VAR[cal.family]}`,
+          'data-reveal': '',
+          'data-i': String(Math.min(i, 7)),
+        },
+        h(
+          'div',
+          { class: 'card-head' },
+          h('span', { class: 'fam-tag' }, h('i'), FAMILY_LABEL[cal.family]),
+          h('span', { class: 'card-region' }, cal.region),
+        ),
+        h('h3', { class: 'card-name' }, cal.name),
+        label,
+        extra,
+        weekday,
+        info,
+      ),
+    );
+  });
+
+  clear(root);
+  root.append(title, sub, sky, grid);
+
   const render = () => {
     const { jdn } = getState();
     const noon = (jdn - UNIX_EPOCH_JDN) * MS_PER_DAY + MS_PER_DAY / 2;
-    clear(root);
+    setText(sub, describeGregorian(jdn));
 
-    // Sky panel
-    const moon = moonStateAt(noon);
-    const seasons = new Set<SkyKind>(SEASON_KINDS);
-    const prevSeason = adjacentEvent(noon, seasons, -1);
-    const nextSeason = adjacentEvent(noon, seasons, 1);
-    const nextLunar = adjacentEvent(noon, new Set<SkyKind>(['lunar_eclipse']), 1);
-    const nextSolar = adjacentEvent(noon, new Set<SkyKind>(['solar_eclipse']), 1);
-    const nextFull = adjacentEvent(noon, new Set<SkyKind>(['full_moon']), 1);
-    const nextNew = adjacentEvent(noon, new Set<SkyKind>(['new_moon']), 1);
-    const apsis = adjacentEvent(noon, new Set<SkyKind>(['perihelion', 'aphelion']), 1);
+    const m = moonStateAt(noon);
+    moon.set(m.angle, m.illuminated);
+    setText(moonName, m.name);
+    setText(moonLit, `${Math.round(m.illuminated * 100)}% illuminated`);
 
-    const sky = h(
-      'section',
-      { class: 'panel sky', 'aria-labelledby': 'sky-h' },
-      h('h2', { id: 'sky-h' }, 'The sky on this date'),
-      h(
-        'div',
-        { class: 'moon-row' },
-        moonSvg(moon.angle),
-        h(
-          'div',
-          {},
-          h('div', { class: 'big' }, moon.name),
-          h(
-            'div',
-            { class: 'muted' },
-            `${Math.round(moon.illuminated * 100)}% illuminated (at 12:00 UTC)`,
-          ),
-        ),
-      ),
-      h(
-        'ul',
-        { class: 'events' },
-        eventRow('Previous solstice or equinox', prevSeason, jdn),
-        eventRow('Next solstice or equinox', nextSeason, jdn),
-        eventRow('Next new moon', nextNew, jdn),
-        eventRow('Next full moon', nextFull, jdn),
-        eventRow('Next lunar eclipse', nextLunar, jdn),
-        eventRow('Next solar eclipse', nextSolar, jdn),
-        eventRow(`Next ${apsis ? KIND_LABEL[apsis.kind].toLowerCase() : 'apsis'}`, apsis, jdn),
-      ),
-    );
-
-    // Calendar cards by family
-    const groups = h('div', { class: 'groups' });
-    for (const fam of FAMILY_ORDER) {
-      const cals = CALENDARS.filter((c) => c.family === fam);
-      if (!cals.length) continue;
-      const grid = h('div', { class: 'cards' });
-      for (const cal of cals) {
-        const d = cal.fromJDN(jdn);
-        grid.append(
-          h(
-            'article',
-            { class: `card fam-${fam}`, style: `--fam:${FAMILY_VAR[fam]}` },
-            h('h4', {}, cal.name),
-            h('div', { class: 'card-label' }, d.label),
-            d.extra ? h('div', { class: 'card-extra' }, d.extra) : null,
-            d.weekday && !d.extra?.includes(d.weekday)
-              ? h('div', { class: 'muted' }, d.weekday)
-              : null,
-            h('details', {}, h('summary', {}, cal.region), h('p', { class: 'blurb' }, cal.blurb)),
-          ),
-        );
+    for (const c of cds) {
+      const ev: SkyEvent | undefined = adjacentEvent(noon, new Set(c.kinds), 1);
+      if (!ev) {
+        setText(c.num, '--');
+        setText(c.unit, '');
+        setText(c.what, 'none found');
+        setText(c.when, '');
+        continue;
       }
-      groups.append(
-        h(
-          'section',
-          { class: 'group', style: `--fam:${FAMILY_VAR[fam]}` },
-          h('h3', {}, h('span', { class: 'swatch' }), FAMILY_LABEL[fam]),
-          grid,
-        ),
-      );
+      const days = Math.round((ev.time - noon) / MS_PER_DAY);
+      setText(c.num, String(days));
+      setText(c.unit, days === 1 ? 'day' : 'days');
+      setText(c.what, ev.label);
+      setText(c.when, formatDateTimeUtc(ev.time));
     }
 
-    root.append(h('div', { class: 'today-layout' }, sky, groups));
+    for (const { cal, label, extra, weekday } of cards.values()) {
+      const d = cal.fromJDN(jdn);
+      setText(label, d.label);
+      setText(extra, d.extra ?? '');
+      extra.hidden = !d.extra;
+      const showDay = !!d.weekday && !d.extra?.includes(d.weekday);
+      setText(weekday, showDay ? (d.weekday ?? '') : '');
+      weekday.hidden = !showDay;
+    }
   };
 
   render();
