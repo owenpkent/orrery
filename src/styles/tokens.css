@@ -1,0 +1,114 @@
+/* Every design token lives here. Dark is the default; light is a full alternate. */
+:root {
+  color-scheme: dark;
+
+  /* surfaces */
+  --bg: #05060a;
+  --bg-2: #0a0c14;
+  --text: #eef0f8;
+  --text-soft: #c4c9dc;
+  --muted: #98a1bd;
+  --border: rgba(255, 255, 255, 0.1);
+  --hairline-hi: rgba(255, 255, 255, 0.3);
+  --hairline-lo: rgba(255, 255, 255, 0.05);
+  --glass: linear-gradient(160deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02));
+  --glass-solid: rgba(14, 16, 26, 0.86);
+  --glass-blur: 18px;
+  --inner-glow: inset 0 1px 0 rgba(255, 255, 255, 0.09), inset 0 0 40px rgba(130, 120, 255, 0.04);
+  --shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.8);
+  --tile: rgba(255, 255, 255, 0.045);
+  --tile-hover: rgba(255, 255, 255, 0.1);
+  --spot: rgba(255, 255, 255, 0.11);
+
+  /* brand and accents */
+  --accent: #9db4ff;
+  --accent-ink: #060814;
+  --accent-grad: linear-gradient(135deg, #b9a8ff 0%, #8fb0ff 55%, #7fd3ff 100%);
+  --focus: #ffd27a;
+  --glow-indigo: rgba(88, 101, 255, 0.34);
+  --glow-violet: rgba(160, 90, 255, 0.26);
+  --glow-amber: rgba(255, 170, 70, 0.2);
+  --grain-opacity: 0.07;
+
+  /* calendar families */
+  --c-solar: #ffb454;
+  --c-lunar: #94acff;
+  --c-lunisolar: #4fe0c0;
+  --c-count: #cf9bff;
+  --c-invented: #ff7d8f;
+
+  /* sky events */
+  --ev-season: #ffb454;
+  --ev-moon: #dfe6f5;
+  --ev-quarter: #8a95b4;
+  --ev-eclipse: #ff6b6b;
+  --ev-apsis: #c0a8ff;
+  --sun: #ffc15a;
+  --earth: #6cb2ff;
+  --work: #9be8b6;
+  --off: #a9b8e8;
+  --gold: #ffd27a;
+  --gold-glow: rgba(255, 190, 80, 0.32);
+
+  /* type */
+  --font-display: 'Instrument Serif', 'Iowan Old Style', Georgia, serif;
+  --font-ui: 'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono:
+    'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, 'Cascadia Mono', monospace;
+
+  /* shape and motion */
+  --r-sm: 12px;
+  --r-md: 18px;
+  --r-lg: 26px;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur: 0.7s;
+  --nav-h: 64px;
+  --dock-h: 128px;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f1f0ec;
+  --bg-2: #e8e7e1;
+  --text: #14161f;
+  --text-soft: #2d3142;
+  --muted: #565c72;
+  --border: rgba(20, 22, 40, 0.14);
+  --hairline-hi: rgba(255, 255, 255, 0.95);
+  --hairline-lo: rgba(20, 22, 40, 0.1);
+  --glass: linear-gradient(160deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.55));
+  --glass-solid: rgba(255, 255, 255, 0.92);
+  --inner-glow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --shadow: 0 20px 50px -26px rgba(40, 40, 90, 0.4);
+  --tile: rgba(20, 22, 40, 0.05);
+  --tile-hover: rgba(20, 22, 40, 0.1);
+  --spot: rgba(90, 80, 255, 0.12);
+
+  --accent: #3b46d4;
+  --accent-ink: #ffffff;
+  --accent-grad: linear-gradient(135deg, #5b4bd8 0%, #3b5bdb 100%);
+  --focus: #3b46d4;
+  --glow-indigo: rgba(88, 101, 255, 0.2);
+  --glow-violet: rgba(160, 90, 255, 0.14);
+  --glow-amber: rgba(255, 170, 70, 0.22);
+  --grain-opacity: 0.05;
+
+  --c-solar: #a8480a;
+  --c-lunar: #3a43c4;
+  --c-lunisolar: #0b6e63;
+  --c-count: #7020b8;
+  --c-invented: #b8123a;
+
+  --ev-season: #a8480a;
+  --ev-moon: #3d4560;
+  --ev-quarter: #7d86a3;
+  --ev-eclipse: #c01f1f;
+  --ev-apsis: #6d3fd0;
+  --sun: #f5a300;
+  --earth: #1d5fd1;
+  --work: #166534;
+  --off: #4a5594;
+  --gold: #a8660a;
+  --gold-glow: rgba(240, 160, 30, 0.3);
+}

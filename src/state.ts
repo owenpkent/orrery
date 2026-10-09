@@ -1,13 +1,14 @@
 /** App state: the selected day (a JDN) and the current view, mirrored in the URL hash. */
 import { isoToJdn, jdnToIso, todayJDN } from './calendars/jdn';
 
-export type ViewId = 'today' | 'timeline' | 'ring' | 'orrery';
+export type ViewId = 'home' | 'today' | 'timeline' | 'ring' | 'orrery';
 
 export const VIEWS: { id: ViewId; label: string }[] = [
+  { id: 'home', label: 'Home' },
   { id: 'today', label: 'Today' },
   { id: 'timeline', label: 'Timeline' },
-  { id: 'ring', label: 'Orrery ring' },
-  { id: 'orrery', label: 'Orrery calendar' },
+  { id: 'ring', label: 'Ring' },
+  { id: 'orrery', label: 'Calendar' },
 ];
 
 export interface AppState {
@@ -18,7 +19,7 @@ export interface AppState {
 type Listener = (s: AppState) => void;
 
 const listeners = new Set<Listener>();
-const state: AppState = { jdn: todayJDN(), view: 'today' };
+const state: AppState = { jdn: todayJDN(), view: 'home' };
 
 export function getState(): Readonly<AppState> {
   return state;
