@@ -6,11 +6,12 @@ import { KIND_LABEL, eventsInRange, type SkyEvent, type SkyKind } from '../sky/e
 import { getState, setDate, subscribe } from '../state';
 import { describeGregorian } from '../ui/dateControl';
 import { clear, esc, h } from '../ui/dom';
+import { reducedMotion, tween } from '../ui/fx';
 import { FAMILY_VAR, formatDateTimeUtc } from '../ui/format';
 
 const MIN_SPAN = 14;
 const MAX_SPAN = 9200;
-const LANE_H = 28;
+const LANE_H = 34;
 const AXIS_H = 44;
 const STRIP_H = 36;
 const MS_PER_DAY = 86400000;
@@ -105,29 +106,45 @@ export function mountTimeline(root: HTMLElement): () => void {
   const lanes = () => lanesAll.filter((c) => !hiddenLanes.has(c.id));
   const labelW = () => (width < 640 ? 96 : 176);
 
-  function zoom(factor: number, anchorT?: number) {
+  let stopAnim: (() => void) | null = null;
+
+  /** Glide the window to a new start and span (instant under reduced motion or while dragging). */
+  function glide(ns: number, nsp: number, animate = true) {
+    stopAnim?.();
+    stopAnim = null;
+    const s0 = start;
+    const sp0 = span;
+    if (!animate || reducedMotion()) {
+      start = ns;
+      span = nsp;
+      draw();
+      return;
+    }
+    // interpolate the span in log space so zooming feels even
+    stopAnim = tween(0, 1, 520, (p) => {
+      span = Math.exp(Math.log(sp0) + (Math.log(nsp) - Math.log(sp0)) * p);
+      start = s0 + (ns - s0) * p;
+      draw();
+    });
+  }
+
+  function zoom(factor: number, anchorT?: number, animate = true) {
     const a = anchorT ?? start + span / 2;
     const ns = Math.min(MAX_SPAN, Math.max(MIN_SPAN, span * factor));
     const frac = (a - start) / span;
-    start = a - frac * ns;
-    span = ns;
-    draw();
+    glide(a - frac * ns, ns, animate);
   }
 
-  function pan(days: number) {
-    start += days;
-    draw();
+  function pan(days: number, animate = true) {
+    glide(start + days, span, animate);
   }
 
   function setWindow(s: number, sp: number) {
-    start = s;
-    span = sp;
-    draw();
+    glide(s, sp);
   }
 
-  function centerOnSelected() {
-    start = getState().jdn + 0.5 - span / 2;
-    draw();
+  function centerOnSelected(sp = span) {
+    glide(getState().jdn + 0.5 - sp / 2, sp);
   }
 
   function draw() {
@@ -141,6 +158,17 @@ export function mountTimeline(root: HTMLElement): () => void {
     const parts: string[] = [];
     parts.push(
       `<svg xmlns="http://www.w3.org/2000/svg" class="tl-svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Calendar timeline">`,
+    );
+    parts.push(
+      '<defs>' +
+        Object.keys(FAMILY_VAR)
+          .map(
+            (f) =>
+              `<linearGradient id="tg-${f}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" style="stop-color:${FAMILY_VAR[f]};stop-opacity:.62"/><stop offset="1" style="stop-color:${FAMILY_VAR[f]};stop-opacity:.24"/></linearGradient>` +
+              `<linearGradient id="tg2-${f}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" style="stop-color:${FAMILY_VAR[f]};stop-opacity:.34"/><stop offset="1" style="stop-color:${FAMILY_VAR[f]};stop-opacity:.1"/></linearGradient>`,
+          )
+          .join('') +
+        '</defs>',
     );
 
     // Axis: Gregorian months/years, and day numbers when zoomed in.
@@ -199,7 +227,7 @@ export function mountTimeline(root: HTMLElement): () => void {
       const y = laneTop + i * LANE_H;
       const fam = FAMILY_VAR[cal.family];
       const bands = cal.monthStarts(from, to);
-      parts.push(`<g class="lane" style="--fam:${fam}">`);
+      parts.push(`<g class="lane fam-${cal.family}" style="--fam:${fam}">`);
       parts.push(
         `<rect class="lane-bg" x="${L}" y="${y}" width="${plotW}" height="${LANE_H - 2}"/>`,
       );
@@ -212,7 +240,7 @@ export function mountTimeline(root: HTMLElement): () => void {
         if (x1 <= x0) return;
         const w = x1 - x0;
         parts.push(
-          `<rect class="band ${(bi + b.month) % 2 ? 'odd' : 'even'}${yearStart ? ' year-start' : ''}" x="${x0}" y="${y}" width="${w}" height="${LANE_H - 2}"/>`,
+          `<rect class="band ${(bi + b.month) % 2 ? 'odd' : 'even'}${yearStart ? ' year-start' : ''}" x="${x0 + 1}" y="${y + 2}" width="${Math.max(1, w - 2)}" height="${LANE_H - 6}" rx="8" fill="url(#${(bi + b.month) % 2 ? 'tg' : 'tg2'}-${cal.family})"/>`,
         );
         if (yearStart && x(b.start) >= L) {
           parts.push(
@@ -225,14 +253,16 @@ export function mountTimeline(root: HTMLElement): () => void {
         const t = fit(label, maxChars);
         if (t && fullW > 18) {
           const tx = Math.max(x0, x(b.start)) + 4;
-          parts.push(`<text class="band-text" x="${tx}" y="${y + 17}">${esc(t)}</text>`);
+          parts.push(
+            `<text class="band-text" x="${tx}" y="${y + LANE_H / 2 + 3}">${esc(t)}</text>`,
+          );
         }
       });
       parts.push('</g>');
-      const nameChars = Math.floor((L - 16) / 6.6);
+      const nameChars = Math.floor((L - 24) / 6.6);
       const nm = cal.name.length > nameChars ? cal.name.slice(0, nameChars - 1) + '.' : cal.name;
       parts.push(
-        `<g class="lane-name" style="--fam:${fam}"><rect x="2" y="${y + 4}" width="4" height="${LANE_H - 10}" rx="2"/><text x="12" y="${y + 17}">${esc(nm)}</text></g>`,
+        `<g class="lane-name" style="--fam:${fam}"><circle cx="8" cy="${y + LANE_H / 2 - 1}" r="3.5"/><text x="19" y="${y + LANE_H / 2 + 3}">${esc(nm)}</text></g>`,
       );
     });
 
@@ -242,6 +272,7 @@ export function mountTimeline(root: HTMLElement): () => void {
       const xx = x(tOfMs(ev.time));
       if (xx < L || xx > L + plotW) continue;
       parts.push(
+        `<line class="ev-glow ${cls}" x1="${xx}" x2="${xx}" y1="${AXIS_H}" y2="${bottom}"/>`,
         `<line class="ev-line ${cls}" x1="${xx}" x2="${xx}" y1="${AXIS_H}" y2="${bottom}"/>`,
       );
       const rowY = AXIS_H + (cls === 'ev-moon' || cls === 'ev-quarter' ? 26 : 10);
@@ -312,6 +343,8 @@ export function mountTimeline(root: HTMLElement): () => void {
   let drag: { x: number; start: number; moved: boolean; id: number } | null = null;
   svgHost.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
+    stopAnim?.();
+    stopAnim = null;
     drag = { x: e.clientX, start, moved: false, id: e.pointerId };
     svgHost.setPointerCapture(e.pointerId);
   });
@@ -376,9 +409,9 @@ export function mountTimeline(root: HTMLElement): () => void {
       e.preventDefault();
       const p = pointerT(e);
       if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
-        pan(((e.deltaX || e.deltaY) / geom().plotW) * span);
+        pan(((e.deltaX || e.deltaY) / geom().plotW) * span, false);
       } else {
-        zoom(e.deltaY > 0 ? 1.18 : 1 / 1.18, p.inPlot ? p.t : undefined);
+        zoom(e.deltaY > 0 ? 1.18 : 1 / 1.18, p.inPlot ? p.t : undefined, false);
       }
     },
     { passive: false },
@@ -393,24 +426,21 @@ export function mountTimeline(root: HTMLElement): () => void {
     );
   const controls = h(
     'div',
-    { class: 'tl-controls', role: 'group', 'aria-label': 'Timeline window' },
+    { class: 'tl-controls glass', role: 'group', 'aria-label': 'Timeline window' },
     btn('<', 'Pan earlier', () => pan(-span / 4)),
     btn('>', 'Pan later', () => pan(span / 4)),
     btn('+', 'Zoom in', () => zoom(1 / 1.5)),
     btn('-', 'Zoom out', () => zoom(1.5)),
     btn('Month', 'Show 45 days around the selected date', () => {
-      span = 45;
-      centerOnSelected();
+      centerOnSelected(45);
     }),
     btn('Year', 'Show one year around the selected date', () => {
-      span = 366;
-      centerOnSelected();
+      centerOnSelected(366);
     }),
     btn('10 years', 'Show ten years around the selected date', () => {
-      span = 3653;
-      centerOnSelected();
+      centerOnSelected(3653);
     }),
-    btn('Center on date', 'Center the window on the selected date', centerOnSelected),
+    btn('Center on date', 'Center the window on the selected date', () => centerOnSelected()),
     btn('Gregorian year', 'Show the whole Gregorian year of the selected date', () => {
       const y = jdnToGregorian(getState().jdn).year;
       setWindow(gregorianToJDN(y, 1, 1), 365.25);
@@ -462,14 +492,20 @@ export function mountTimeline(root: HTMLElement): () => void {
       'div',
       { class: 'timeline-view' },
       h(
+        'h1',
+        { class: 'view-title', 'data-reveal': '' },
+        'Every calendar, ',
+        h('em', {}, 'in parallel.'),
+      ),
+      h(
         'p',
-        { class: 'view-intro' },
+        { class: 'view-intro', 'data-reveal': '', 'data-i': '1' },
         'Each lane is a calendar. Drag to pan, scroll to zoom, click to pick a day. Heavy lines mark where a calendar starts a new year.',
       ),
       controls,
-      toggles,
       h('div', { class: 'tl-wrap' }, svgHost, tip),
       hint,
+      toggles,
     ),
   );
 
