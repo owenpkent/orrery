@@ -1,17 +1,19 @@
 /** Orrery ring: one solstice-to-solstice orbit, with calendar months as concentric rings. */
 import { CALENDARS } from '../calendars';
-import { jdnFromMs, jdnToGregorian } from '../calendars/jdn';
-import { decemberSolstice, earthAtJDN } from '../sky/events';
+import { WEEKDAYS, weekdayIndex } from '../calendars/jdn';
+import { earthAtJDN } from '../sky/events';
+import { OrbitDrag, angleOf, windowFor, type OrbitWindow } from '../sky/orbit';
 import { getState, setDate, subscribe } from '../state';
-import { describeGregorian } from '../ui/dateControl';
+import { addMonths, describeGregorian } from '../ui/dateControl';
 import { clear, esc, h } from '../ui/dom';
+import { setText, tween } from '../ui/fx';
 import { FAMILY_VAR } from '../ui/format';
 import { fit } from './timeline';
 
 const SIZE = 920;
 const C = SIZE / 2;
 // The view box is wider than the orbit so the equinox labels fit beside it.
-const VB = { x: -110, y: -12, w: SIZE + 220, h: SIZE + 30 };
+const VB = { x: -110, y: -12, w: SIZE + 280, h: SIZE + 30 };
 const R_ORBIT = 424;
 const R_OUTER = 396;
 const THICK = 24;
@@ -32,31 +34,6 @@ const rad = (deg: number) => (deg * Math.PI) / 180;
 const px = (r: number, deg: number) => C + r * Math.cos(rad(deg));
 const py = (r: number, deg: number) => C - r * Math.sin(rad(deg));
 
-interface Window {
-  start: number; // jdn of the December solstice day at or before the date
-  end: number; // jdn of the next December solstice day
-  angle0: number; // Earth longitude (deg) at start
-}
-
-function windowFor(jdn: number): Window {
-  let y = jdnToGregorian(jdn).year;
-  let s = jdnFromMs(decemberSolstice(y));
-  while (s > jdn) {
-    y--;
-    s = jdnFromMs(decemberSolstice(y));
-  }
-  return { start: s, end: jdnFromMs(decemberSolstice(y + 1)), angle0: earthAtJDN(s).longitude };
-}
-
-/** Unwrapped angle (degrees, increasing counter-clockwise on screen) of day t within the window. */
-function angleOf(w: Window, t: number): number {
-  if (t >= w.end) return w.angle0 + 360;
-  if (t <= w.start) return w.angle0;
-  let d = earthAtJDN(t).longitude - w.angle0;
-  d = ((d % 360) + 360) % 360;
-  return w.angle0 + d;
-}
-
 function sector(rIn: number, rOut: number, a0: number, a1: number): string {
   const large = a1 - a0 > 180 ? 1 : 0;
   return (
@@ -65,22 +42,77 @@ function sector(rIn: number, rOut: number, a0: number, a1: number): string {
   );
 }
 
+function arcPath(r: number, a0: number, a1: number): string {
+  const large = a1 - a0 > 180 ? 1 : 0;
+  return `M${px(r, a0)} ${py(r, a0)} A${r} ${r} 0 ${large} 0 ${px(r, a1)} ${py(r, a1)}`;
+}
+
 export function mountRing(root: HTMLElement): () => void {
   const on = new Set(DEFAULT_ON);
   const host = h('div', { class: 'ring-host' });
-  const info = h('div', { class: 'panel ring-info', 'aria-live': 'polite' });
 
-  function draw() {
-    const jdn = getState().jdn;
-    const w = windowFor(jdn);
+  const infoDate = h('p', { class: 'ring-date display' });
+  const infoWeekday = h('span', { class: 'eyebrow' });
+  const stat = (label: string) => {
+    const v = h('span', { class: 'rs-v num' });
+    return { v, el: h('div', { class: 'rs' }, h('span', { class: 'rs-l' }, label), v) };
+  };
+  const sDist = stat('Distance from the Sun');
+  const sLon = stat('Orbital longitude');
+  const sDay = stat('Day of the orbit');
+  const info = h(
+    'div',
+    { class: 'panel glass ring-info', 'data-reveal': '', 'data-i': '2' },
+    infoWeekday,
+    infoDate,
+    h('div', { class: 'rs-grid' }, sDist.el, sLon.el, sDay.el),
+    h(
+      'p',
+      { class: 'muted ring-note' },
+      "Months sit at Earth's true orbital angle, so they look slightly uneven: Earth runs fastest near January perihelion and slowest near July. Drag Earth, or anywhere around the rings, to travel through the year.",
+    ),
+  );
+
+  // Persistent state between draws
+  let win: OrbitWindow = windowFor(getState().jdn);
+  let shownKey = '';
+  let curAng = angleOf(win, getState().jdn);
+  let stopTween: (() => void) | null = null;
+  let dragging: OrbitDrag | null = null;
+  let earthG: SVGGElement;
+  let earthLine: SVGLineElement;
+  let travelled: SVGPathElement;
+  let glowArc: SVGPathElement;
+
+  function placeEarth(ang: number) {
+    curAng = ang;
+    const ex = px(R_ORBIT, ang);
+    const ey = py(R_ORBIT, ang);
+    earthG.setAttribute('transform', `translate(${ex} ${ey})`);
+    earthLine.setAttribute('x2', String(ex));
+    earthLine.setAttribute('y2', String(ey));
+    const d = arcPath(R_ORBIT, win.angle0, Math.max(win.angle0 + 0.01, ang));
+    travelled.setAttribute('d', d);
+    glowArc.setAttribute('d', d);
+  }
+
+  function drawStatic() {
+    win = windowFor(getState().jdn);
+    const w = win;
     const shown = CALENDARS.filter((c) => on.has(c.id));
+    shownKey = `${w.start}|${[...on].sort().join(',')}`;
     const parts: string[] = [];
     parts.push(
-      `<svg xmlns="http://www.w3.org/2000/svg" class="ring-svg" viewBox="${VB.x} ${VB.y} ${VB.w} ${VB.h}" role="img" aria-label="The year as a ring around the sun">`,
+      `<svg xmlns="http://www.w3.org/2000/svg" class="ring-svg" viewBox="${VB.x} ${VB.y} ${VB.w} ${VB.h}" role="group" aria-label="The year as a ring around the sun. Drag Earth to change the date.">`,
+      `<defs>
+        <radialGradient id="rg-sun"><stop offset="0" stop-color="#fff6d6"/><stop offset=".45" stop-color="#ffc15a"/><stop offset="1" stop-color="#ff7a2a"/></radialGradient>
+        <radialGradient id="rg-glow"><stop offset="0" stop-color="#ffb454" stop-opacity=".75"/><stop offset=".5" stop-color="#ff8a3a" stop-opacity=".18"/><stop offset="1" stop-color="#ff8a3a" stop-opacity="0"/></radialGradient>
+        <radialGradient id="rg-earth" cx=".35" cy=".3"><stop offset="0" stop-color="#bfe0ff"/><stop offset=".55" stop-color="#3b84e0"/><stop offset="1" stop-color="#0e2f78"/></radialGradient>
+        <radialGradient id="rg-earthglow"><stop offset=".3" stop-color="#6cb2ff" stop-opacity=".6"/><stop offset="1" stop-color="#6cb2ff" stop-opacity="0"/></radialGradient>
+        <filter id="rg-blur" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="6"/></filter>
+      </defs>`,
     );
-    // Orbit
-    parts.push(`<circle class="orbit" cx="${C}" cy="${C}" r="${R_ORBIT}"/>`);
-    // Rings
+    parts.push(`<circle cx="${C}" cy="${C}" r="${R_ORBIT}" class="orbit"/>`);
     const ringR = (i: number) => R_OUTER - i * (THICK + GAP);
     shown.forEach((cal, i) => {
       const rOut = ringR(i);
@@ -101,13 +133,11 @@ export function mountRing(root: HTMLElement): () => void {
         parts.push(
           `<path class="seg ${(bi + b.month) % 2 ? 'odd' : 'even'}${yearStart ? ' year-start' : ''}" d="${sector(rIn, rOut, a0, a1)}"><title>${esc(tip)}</title></path>`,
         );
-        // Label if there is room.
         const mid = (a0 + a1) / 2;
         const rMid = (rIn + rOut) / 2;
         const arc = ((a1 - a0) * Math.PI * rMid) / 180;
         const chars = Math.floor((arc - 6) / 6.2);
-        const t = fit(b.label, chars);
-        if (t) {
+        if (fit(b.label, chars)) {
           let rot = 90 - mid;
           rot = ((((rot + 180) % 360) + 360) % 360) - 180;
           if (Math.abs(rot) > 90) rot += 180;
@@ -118,14 +148,12 @@ export function mountRing(root: HTMLElement): () => void {
           );
         }
       });
-      parts.push('</g>');
-      // ring name at the window start (top), on the left of the gap
       parts.push(
-        `<text class="ring-name" x="${C - 6}" y="${C - (rOut + rIn) / 2 + 4}" text-anchor="end" style="--fam:${FAMILY_VAR[cal.family]}">${esc(cal.name)}</text>`,
+        `<text class="ring-name" x="${C - 6}" y="${C - (rOut + rIn) / 2 + 4}" text-anchor="end">${esc(cal.name)}</text>`,
       );
+      parts.push('</g>');
     });
 
-    // Cardinal markers: Earth longitude 90 = December solstice (top) ... counterclockwise.
     const cardinals: [number, string][] = [
       [90, 'December solstice'],
       [180, 'March equinox'],
@@ -144,65 +172,102 @@ export function mountRing(root: HTMLElement): () => void {
         `<text class="cardinal-text" x="${deg === 180 ? lx - 4 : deg === 0 ? lx + 4 : lx}" y="${ly + dy}" text-anchor="${anchor}">${label}</text>`,
       );
     }
-    // Perihelion (~early January) and aphelion marks use the actual Earth distance.
-    // Sun
-    parts.push(`<circle class="sun-glow" cx="${C}" cy="${C}" r="${R_SUN + 10}"/>`);
-    parts.push(`<circle class="sun" cx="${C}" cy="${C}" r="${R_SUN}"/>`);
-    parts.push(`<text class="sun-text" x="${C}" y="${C + 4}" text-anchor="middle">Sun</text>`);
-
-    // Earth
-    const ang = angleOf(w, jdn);
-    const ex = px(R_ORBIT, ang);
-    const ey = py(R_ORBIT, ang);
     parts.push(
-      `<line class="earth-line" x1="${C}" y1="${C}" x2="${ex}" y2="${ey}"/>`,
-      `<circle class="earth" cx="${ex}" cy="${ey}" r="13"/>`,
-      `<text class="earth-text" x="${ex}" y="${ey + 4}" text-anchor="middle">E</text>`,
+      `<circle cx="${C}" cy="${C}" r="${R_SUN * 3.4}" fill="url(#rg-glow)" class="sun-halo"/>`,
+      `<circle class="sun" cx="${C}" cy="${C}" r="${R_SUN}" fill="url(#rg-sun)"/>`,
+      `<text class="sun-text" x="${C}" y="${C + 4}" text-anchor="middle">Sun</text>`,
+      `<path class="orbit-arc-glow" filter="url(#rg-blur)"/>`,
+      `<path class="orbit-arc"/>`,
+      `<line class="earth-line" x1="${C}" y1="${C}" x2="${C}" y2="${C}"/>`,
+      `<g class="earth-g" tabindex="0" role="slider" aria-label="Earth on its orbit. Drag, or press arrow keys, to change the date.">
+         <circle r="40" fill="url(#rg-earthglow)" class="earth-halo"/>
+         <circle r="30" fill="transparent" class="earth-hit"/>
+         <circle class="earth" r="15" fill="url(#rg-earth)"/>
+         <circle class="earth-focus" r="23" fill="none"/>
+       </g>`,
+      '</svg>',
     );
-    parts.push('</svg>');
     host.innerHTML = parts.join('');
+    earthG = host.querySelector<SVGGElement>('.earth-g')!;
+    earthLine = host.querySelector<SVGLineElement>('.earth-line')!;
+    travelled = host.querySelector<SVGPathElement>('.orbit-arc')!;
+    glowArc = host.querySelector<SVGPathElement>('.orbit-arc-glow')!;
+    wire(host.querySelector('svg')!);
+  }
 
-    // Click to select a day: nearest day whose angle matches the click angle.
-    const svg = host.querySelector('svg')!;
-    svg.addEventListener('click', (ev) => {
-      const r = svg.getBoundingClientRect();
-      const sx = VB.x + ((ev.clientX - r.left) / r.width) * VB.w - C;
-      const sy = C - (VB.y + ((ev.clientY - r.top) / r.height) * VB.h);
-      const radius = Math.hypot(sx, sy);
-      if (radius < R_SUN || radius > R_ORBIT + 20) return;
-      let a = (Math.atan2(sy, sx) * 180) / Math.PI;
-      a = ((((a - w.angle0) % 360) + 360) % 360) + w.angle0;
-      let best = w.start;
-      let bestD = Infinity;
-      for (let t = w.start; t < w.end; t++) {
-        const lo = angleOf(w, t);
-        const hi = angleOf(w, t + 1);
-        const d = a >= lo && a < hi ? 0 : Math.min(Math.abs(a - lo), Math.abs(a - hi));
-        if (d < bestD) {
-          bestD = d;
-          best = t;
-        }
-      }
-      setDate(best);
+  function pointerAngle(svg: SVGSVGElement, ev: PointerEvent): { deg: number; radius: number } {
+    const r = svg.getBoundingClientRect();
+    const sx = VB.x + ((ev.clientX - r.left) / r.width) * VB.w - C;
+    const sy = C - (VB.y + ((ev.clientY - r.top) / r.height) * VB.h);
+    return { deg: (Math.atan2(sy, sx) * 180) / Math.PI, radius: Math.hypot(sx, sy) };
+  }
+
+  function wire(svg: SVGSVGElement) {
+    svg.addEventListener('pointerdown', (ev) => {
+      if (ev.button !== 0) return;
+      const p = pointerAngle(svg, ev);
+      if (p.radius < R_SUN || p.radius > R_ORBIT + 24) return;
+      ev.preventDefault();
+      svg.setPointerCapture(ev.pointerId);
+      dragging = new OrbitDrag(getState().jdn);
+      svg.classList.add('dragging');
+      stopTween?.();
+      setDate(dragging.update(p.deg));
     });
+    svg.addEventListener('pointermove', (ev) => {
+      if (!dragging) return;
+      setDate(dragging.update(pointerAngle(svg, ev).deg));
+    });
+    const end = () => {
+      dragging = null;
+      svg.classList.remove('dragging');
+    };
+    svg.addEventListener('pointerup', end);
+    svg.addEventListener('pointercancel', end);
+    earthG.addEventListener('keydown', (ev) => {
+      const j = getState().jdn;
+      const k: Record<string, number> = {
+        ArrowRight: j + 1,
+        ArrowUp: j + 1,
+        ArrowLeft: j - 1,
+        ArrowDown: j - 1,
+        PageUp: addMonths(j, 1),
+        PageDown: addMonths(j, -1),
+      };
+      if (ev.key in k) {
+        ev.preventDefault();
+        setDate(k[ev.key]);
+      }
+    });
+  }
 
-    // Info panel
+  function update() {
+    const jdn = getState().jdn;
+    const nextWin = windowFor(jdn);
+    const key = `${nextWin.start}|${[...on].sort().join(',')}`;
+    const hadFocus = host.contains(document.activeElement);
+    if (key !== shownKey) {
+      stopTween?.();
+      drawStatic();
+      placeEarth(angleOf(win, jdn));
+      if (hadFocus) earthG.focus();
+    } else {
+      const target = angleOf(win, jdn);
+      stopTween?.();
+      if (dragging) placeEarth(target);
+      else stopTween = tween(curAng, target, 650, placeEarth);
+    }
+    earthG.setAttribute('aria-valuetext', describeGregorian(jdn));
+    earthG.setAttribute('aria-valuenow', String(jdn - win.start));
+    earthG.setAttribute('aria-valuemin', '0');
+    earthG.setAttribute('aria-valuemax', String(win.end - win.start - 1));
+
     const e = earthAtJDN(jdn);
-    clear(info);
-    info.append(
-      h('h2', {}, 'Where Earth is'),
-      h('p', { class: 'big' }, describeGregorian(jdn)),
-      h(
-        'p',
-        { class: 'muted' },
-        `Orbit window: solstice day to solstice day (${w.end - w.start} days). Earth is ${e.distanceAu.toFixed(4)} AU from the Sun, at heliocentric ecliptic longitude ${e.longitude.toFixed(1)} degrees.`,
-      ),
-      h(
-        'p',
-        { class: 'muted' },
-        "Months are placed by Earth's true orbital angle, so they look slightly uneven: Earth moves fastest near January perihelion and slowest near July. Click any ring to pick a day.",
-      ),
-    );
+    setText(infoWeekday, WEEKDAYS[weekdayIndex(jdn)]);
+    setText(infoDate, describeGregorian(jdn).split(' ').slice(1).join(' '));
+    setText(sDist.v, `${e.distanceAu.toFixed(4)} AU`);
+    setText(sLon.v, `${e.longitude.toFixed(1)}°`);
+    setText(sDay.v, `${jdn - win.start + 1} of ${win.end - win.start}`);
   }
 
   const fam = h(
@@ -216,7 +281,7 @@ export function mountRing(root: HTMLElement): () => void {
     cb.addEventListener('change', () => {
       if (cb.checked) on.add(c.id);
       else on.delete(c.id);
-      draw();
+      update();
     });
     checks.append(
       h(
@@ -232,13 +297,23 @@ export function mountRing(root: HTMLElement): () => void {
 
   clear(root);
   root.append(
+    h('h1', { class: 'view-title', 'data-reveal': '' }, 'The year, as ', h('em', {}, 'an orbit.')),
     h(
       'div',
       { class: 'ring-view' },
-      h('div', { class: 'ring-main' }, host),
-      h('div', { class: 'ring-side' }, info, fam),
+      h('div', { class: 'ring-main panel glass', 'data-reveal': '', 'data-i': '1' }, host),
+      h(
+        'div',
+        { class: 'ring-side' },
+        info,
+        h('div', { class: 'panel glass', 'data-reveal': '', 'data-i': '3' }, fam),
+      ),
     ),
   );
-  draw();
-  return subscribe(draw);
+  update();
+  const unsub = subscribe(update);
+  return () => {
+    stopTween?.();
+    unsub();
+  };
 }

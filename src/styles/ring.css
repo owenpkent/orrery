@@ -1,0 +1,278 @@
+.ring-view {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 16px;
+  align-items: start;
+}
+
+.ring-view > *,
+.ring-side > * {
+  min-width: 0;
+}
+
+.ring-main {
+  padding: 8px;
+  border-radius: var(--r-lg);
+  background:
+    radial-gradient(60% 60% at 50% 50%, rgba(255, 170, 70, 0.1), transparent 70%), var(--glass);
+}
+
+.ring-host {
+  line-height: 0;
+}
+
+.ring-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 82vh;
+  margin-inline: auto;
+  font-family: var(--font-ui);
+  touch-action: none;
+  user-select: none;
+  cursor: crosshair;
+}
+
+.ring-svg.dragging {
+  cursor: grabbing;
+}
+
+.orbit {
+  fill: none;
+  stroke: var(--accent);
+  stroke-opacity: 0.35;
+  stroke-width: 1.2;
+  stroke-dasharray: 2 7;
+  stroke-linecap: round;
+}
+
+.orbit-arc {
+  fill: none;
+  stroke: var(--sun);
+  stroke-width: 3;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+
+.orbit-arc-glow {
+  fill: none;
+  stroke: var(--sun);
+  stroke-width: 9;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.seg {
+  stroke: var(--bg);
+  stroke-width: 1.5;
+  transition:
+    fill 0.3s,
+    filter 0.3s;
+}
+
+.seg.even {
+  fill: color-mix(in srgb, var(--fam) 13%, transparent);
+}
+.seg.odd {
+  fill: color-mix(in srgb, var(--fam) 30%, transparent);
+}
+.seg.year-start {
+  stroke: var(--fam);
+  stroke-width: 2.2;
+}
+
+.rg:hover .seg.even {
+  fill: color-mix(in srgb, var(--fam) 26%, transparent);
+}
+.rg:hover .seg.odd {
+  fill: color-mix(in srgb, var(--fam) 52%, transparent);
+}
+.rg .seg:hover {
+  fill: color-mix(in srgb, var(--fam) 72%, transparent);
+  filter: drop-shadow(0 0 6px var(--fam));
+}
+
+.seg-text {
+  font-size: 11px;
+  fill: var(--text);
+  pointer-events: none;
+}
+
+.ring-name {
+  font-size: 12px;
+  font-weight: 600;
+  fill: var(--fam);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+
+.rg:hover .ring-name {
+  opacity: 1;
+}
+
+.cardinal {
+  stroke: var(--muted);
+  stroke-opacity: 0.35;
+  stroke-width: 1;
+  stroke-dasharray: 2 5;
+}
+
+.cardinal-text {
+  font-size: 14px;
+  fill: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.sun-halo {
+  pointer-events: none;
+  animation: breathe 6s ease-in-out infinite;
+  transform-origin: 460px 460px;
+}
+
+@keyframes breathe {
+  50% {
+    transform: scale(1.08);
+    opacity: 0.85;
+  }
+}
+
+.sun-text {
+  font-size: 13px;
+  font-weight: 700;
+  fill: #3a1d00;
+  pointer-events: none;
+}
+
+.earth-line {
+  stroke: var(--sun);
+  stroke-opacity: 0.35;
+  stroke-width: 1;
+  stroke-dasharray: 3 5;
+  pointer-events: none;
+}
+
+.earth-g {
+  cursor: grab;
+  outline: none;
+}
+
+.ring-svg.dragging .earth-g {
+  cursor: grabbing;
+}
+
+.earth-halo {
+  pointer-events: none;
+  animation: earth-pulse 3s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes earth-pulse {
+  50% {
+    transform: scale(1.18);
+    opacity: 0.6;
+  }
+}
+
+.earth {
+  stroke: rgba(255, 255, 255, 0.5);
+  stroke-width: 1;
+  transition: transform 0.35s var(--spring);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.earth-g:hover .earth,
+.ring-svg.dragging .earth {
+  transform: scale(1.22);
+}
+
+.earth-focus {
+  stroke: var(--focus);
+  stroke-width: 2.5;
+  opacity: 0;
+}
+
+.earth-g:focus-visible .earth-focus {
+  opacity: 1;
+}
+
+.ring-side {
+  display: grid;
+  gap: 16px;
+}
+
+.ring-info {
+  display: grid;
+  gap: 6px;
+}
+
+.ring-date {
+  font-size: clamp(2.6rem, 4.4vw, 3.6rem);
+  display: block;
+  letter-spacing: -0.03em;
+  margin: 4px 0 8px;
+}
+
+.eyebrow.tick,
+.ring-date.tick {
+  display: block;
+}
+
+.rs-grid {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.rs {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--r-sm);
+  background: var(--tile);
+  border: 1px solid var(--border);
+}
+
+.rs-l {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.rs-v {
+  display: inline-block;
+  font-size: 1rem;
+}
+
+.ring-note {
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+@media (max-width: 1000px) {
+  .ring-view {
+    grid-template-columns: 1fr;
+  }
+  .ring-svg {
+    max-height: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .seg-text,
+  .ring-name,
+  .cardinal-text {
+    display: none;
+  }
+  .ring-view > *,
+  .ring-side > * {
+    min-width: 0;
+  }
+
+  .ring-main {
+    padding: 0;
+  }
+}
