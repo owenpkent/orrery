@@ -8,11 +8,13 @@ html {
   overflow-x: clip;
   scroll-behavior: smooth;
   -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--bg);
   color: var(--text);
   font: 400 16px/1.5 var(--font-ui);
@@ -46,6 +48,15 @@ h4 {
 
 a {
   color: inherit;
+}
+
+/* No double-tap zoom delay on anything tappable; drag surfaces opt out with touch-action: none. */
+a,
+button,
+summary,
+label,
+select {
+  touch-action: manipulation;
 }
 
 .muted {
@@ -87,7 +98,7 @@ a {
 }
 
 .wrap {
-  width: min(1240px, 100% - 32px);
+  width: min(1240px, calc(100% - 32px - var(--safe-left) - var(--safe-right)));
   margin-inline: auto;
   padding: calc(var(--nav-h) + 36px) 0 40px;
 }
@@ -170,10 +181,15 @@ a {
   pointer-events: none;
 }
 
-.glass:hover::after,
-.panel:hover::after,
 .glass:focus-within::after {
   opacity: 1;
+}
+
+@media (hover: hover) {
+  .glass:hover::after,
+  .panel:hover::after {
+    opacity: 1;
+  }
 }
 
 /* ---- buttons ---- */
@@ -194,9 +210,11 @@ a {
     box-shadow 0.3s;
 }
 
-.btn:hover {
-  background: var(--tile-hover);
-  border-color: var(--hairline-hi);
+@media (hover: hover) {
+  .btn:hover {
+    background: var(--tile-hover);
+    border-color: var(--hairline-hi);
+  }
 }
 
 .btn:active {
@@ -211,9 +229,11 @@ a {
   box-shadow: 0 8px 28px -10px var(--glow-indigo);
 }
 
-.btn.primary:hover {
-  filter: brightness(1.1);
-  box-shadow: 0 10px 34px -8px var(--glow-indigo);
+@media (hover: hover) {
+  .btn.primary:hover {
+    filter: brightness(1.1);
+    box-shadow: 0 10px 34px -8px var(--glow-indigo);
+  }
 }
 
 .btn.ghost {
@@ -265,8 +285,10 @@ a {
     border-color 0.25s;
 }
 
-.chk:hover {
-  background: var(--tile-hover);
+@media (hover: hover) {
+  .chk:hover {
+    background: var(--tile-hover);
+  }
 }
 
 .chk:has(input:checked) {
@@ -380,6 +402,12 @@ a {
   from {
     opacity: 0;
     transform: translateY(14px);
+  }
+}
+
+@media (max-width: 480px) {
+  .wrap {
+    width: calc(100% - 24px - var(--safe-left) - var(--safe-right));
   }
 }
 

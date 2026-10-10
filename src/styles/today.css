@@ -147,8 +147,10 @@
     opacity 0.9s var(--ease);
 }
 
-.card:hover {
-  transform: translateY(-3px);
+@media (hover: hover) {
+  .card:hover {
+    transform: translateY(-3px);
+  }
 }
 
 .card > .card-name,
@@ -301,7 +303,7 @@
 }
 
 .card summary {
-  min-height: 32px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   font: 500 0.75rem/1 var(--font-ui);
@@ -311,8 +313,10 @@
   cursor: pointer;
 }
 
-.card summary:hover {
-  color: var(--text);
+@media (hover: hover) {
+  .card summary:hover {
+    color: var(--text);
+  }
 }
 
 .blurb {
@@ -369,5 +373,37 @@
   .c-xl,
   .c-lg {
     padding: 22px;
+  }
+}
+
+@media (max-width: 520px) {
+  .cd-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .cd {
+    grid-template-columns: auto 1fr;
+    grid-template-areas:
+      'title title'
+      'big what'
+      'big when';
+    column-gap: 14px;
+    padding: 12px 16px 12px 20px;
+  }
+  .cd-title {
+    grid-area: title;
+  }
+  .cd-big {
+    grid-area: big;
+    align-self: center;
+    min-height: 0;
+  }
+  .cd-what {
+    grid-area: what;
+    align-self: end;
+  }
+  .cd-when {
+    grid-area: when;
+    align-self: start;
   }
 }

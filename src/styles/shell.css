@@ -70,12 +70,12 @@
 .top {
   position: fixed;
   z-index: 60;
-  top: 12px;
+  top: calc(12px + var(--safe-top));
   left: 0;
   right: 0;
   display: flex;
   justify-content: center;
-  padding-inline: 12px;
+  padding-inline: max(12px, var(--safe-left)) max(12px, var(--safe-right));
   pointer-events: none;
 }
 
@@ -177,6 +177,7 @@
 }
 
 .theme-btn {
+  flex: none;
   display: grid;
   place-items: center;
   width: 44px;
@@ -191,19 +192,21 @@
     transform 0.5s var(--spring);
 }
 
-.theme-btn:hover {
-  background: var(--tile-hover);
-  transform: rotate(25deg);
+@media (hover: hover) {
+  .theme-btn:hover {
+    background: var(--tile-hover);
+    transform: rotate(25deg);
+  }
 }
 
 /* ---- date dock ---- */
 .date-control {
   position: fixed;
   z-index: 55;
-  bottom: 14px;
+  bottom: calc(14px + var(--safe-bottom));
   left: 50%;
   transform: translateX(-50%);
-  width: min(1000px, 100% - 24px);
+  width: min(1000px, calc(100% - 24px - var(--safe-left) - var(--safe-right)));
   padding: 10px 14px 8px;
   border-radius: 28px;
   --fam: var(--accent);
@@ -238,9 +241,11 @@
     color 0.2s;
 }
 
-.step:hover {
-  background: var(--tile-hover);
-  color: var(--text);
+@media (hover: hover) {
+  .step:hover {
+    background: var(--tile-hover);
+    color: var(--text);
+  }
 }
 
 .step:active {
@@ -301,6 +306,7 @@
   appearance: none;
   flex: 1;
   height: 28px;
+  touch-action: pan-y;
   margin: 0;
   background: transparent;
   cursor: pointer;
@@ -359,7 +365,7 @@
 
 /* ---- footer ---- */
 .foot {
-  padding: 40px 16px calc(var(--dock-h) + 24px);
+  padding: 40px max(16px, var(--safe-left)) calc(var(--dock-h) + 24px) max(16px, var(--safe-right));
   border-top: 1px solid var(--border);
   margin-top: 40px;
 }
@@ -391,32 +397,25 @@
   text-underline-offset: 3px;
 }
 
+.foot-gh {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
 .foot a:hover {
   color: var(--text);
 }
 
-@media (max-width: 480px) {
-  .brand {
-    padding: 0 4px 0 6px;
-  }
-  .tab {
-    padding: 0 5px;
-    font-size: 0.76rem;
-  }
-}
-
-@media (max-width: 380px) {
-  .brand {
-    display: none;
-  }
-  .tab {
-    padding: 0 4px;
-  }
-}
-
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-height: 520px) and (pointer: coarse) {
   :root {
-    --dock-h: 104px;
+    --dock-h: calc(112px + var(--safe-bottom));
+  }
+  .scrub {
+    height: 44px;
+  }
+  .dc-scrub {
+    margin-top: -4px;
   }
   .brand-name {
     display: none;
@@ -428,16 +427,13 @@
     padding: 0 8px;
     font-size: 0.8rem;
   }
-  .theme-btn {
-    width: 40px;
-  }
   .topbar {
     gap: 0;
     padding: 4px 4px 4px 6px;
   }
   .date-control {
-    bottom: 8px;
-    width: calc(100% - 16px);
+    bottom: calc(8px + var(--safe-bottom));
+    width: calc(100% - 16px - var(--safe-left) - var(--safe-right));
     padding: 8px 10px 4px;
     border-radius: 24px;
   }
@@ -485,5 +481,64 @@
   .step.far,
   .dc-end {
     display: none;
+  }
+}
+
+/* ---- phones and other touch-first screens: keep scrolling smooth ----
+   Large blurred layers, mix-blend grain and dozens of backdrop filters are what make long pages
+   janky on mobile GPUs. The look stays; the expensive ways of getting it do not. */
+@media (max-width: 760px), (hover: none) and (pointer: coarse) {
+  :root {
+    --glass-blur: 10px;
+  }
+  .aurora i {
+    filter: none;
+  }
+  .grain {
+    mix-blend-mode: normal;
+    opacity: calc(var(--grain-opacity) * 0.45);
+  }
+  .card.glass,
+  .bento-card.glass,
+  .orr-month.glass,
+  .panel.glass,
+  .tl-wrap,
+  .tl-controls.glass {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: var(--glass), color-mix(in srgb, var(--bg-2) 72%, transparent);
+  }
+  .glass::after,
+  .panel::after {
+    display: none;
+  }
+  .mini-month i.w {
+    animation: none;
+  }
+  .orr-day.today {
+    animation: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .brand {
+    padding: 0 4px 0 6px;
+  }
+  .tab {
+    min-width: 44px;
+    padding: 0 6px;
+    font-size: 0.78rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .brand {
+    display: none;
+  }
+  .tab {
+    padding: 0 4px;
+  }
+  .theme-btn {
+    flex: none;
   }
 }
