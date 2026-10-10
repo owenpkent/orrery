@@ -280,6 +280,10 @@
   margin-left: 4px;
 }
 
+.dc-more {
+  display: none;
+}
+
 .dc-scrub {
   display: flex;
   align-items: center;
@@ -396,14 +400,23 @@
     padding: 0 4px 0 6px;
   }
   .tab {
-    padding: 0 6px;
-    font-size: 0.78rem;
+    padding: 0 5px;
+    font-size: 0.76rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .brand {
+    display: none;
+  }
+  .tab {
+    padding: 0 4px;
   }
 }
 
 @media (max-width: 760px) {
   :root {
-    --dock-h: 200px;
+    --dock-h: 104px;
   }
   .brand-name {
     display: none;
@@ -412,12 +425,15 @@
     padding: 0 6px;
   }
   .tab {
-    padding: 0 9px;
+    padding: 0 8px;
     font-size: 0.8rem;
+  }
+  .theme-btn {
+    width: 40px;
   }
   .topbar {
     gap: 0;
-    padding: 4px;
+    padding: 4px 4px 4px 6px;
   }
   .date-control {
     bottom: 8px;
@@ -428,21 +444,36 @@
   .dc-row {
     flex-wrap: wrap;
     gap: 4px 6px;
+    align-items: center;
+  }
+  .dc-more {
+    display: block;
+    order: 2;
+    padding: 0 14px;
+  }
+  .dc-steps {
+    display: none;
+  }
+  .date-control.open .dc-steps {
+    display: flex;
+  }
+  .date-control.open {
+    --dock-open: 1;
   }
   .dc-readout {
-    flex: 1 1 60%;
+    flex: 1 1 auto;
     align-items: flex-start;
     order: 1;
   }
   .dc-today {
-    order: 2;
+    order: 3;
     margin: 0;
   }
   .dc-row > .dc-steps:first-child {
-    order: 3;
+    order: 4;
   }
   .dc-row > .dc-steps:nth-child(3) {
-    order: 4;
+    order: 5;
   }
   .dc-steps {
     flex: 1 1 45%;

@@ -293,10 +293,17 @@
 }
 
 @media (max-width: 700px) {
+  .tl-controls {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tl-controls > * {
+    flex: none;
+  }
   .tl-range {
     margin-left: 0;
-    flex: 1 1 100%;
-    text-align: left;
+    white-space: nowrap;
   }
   .tl-controls .btn {
     padding: 0 10px;

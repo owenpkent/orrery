@@ -73,6 +73,22 @@ export function createDateControl(): HTMLElement {
     btn('+10y', 'Forward 10 years', (j) => addMonths(j, 120), 'far'),
   );
 
+  const more = h(
+    'button',
+    {
+      type: 'button',
+      class: 'btn dc-more',
+      'aria-expanded': 'false',
+      'aria-label': 'Show date steppers',
+      onclick: () => {
+        const open = root.classList.toggle('open');
+        more.setAttribute('aria-expanded', String(open));
+        more.textContent = open ? 'Less' : 'Step';
+      },
+    },
+    'Step',
+  );
+
   const root = h(
     'section',
     { class: 'date-control glass', 'aria-label': 'Date' },
@@ -82,6 +98,7 @@ export function createDateControl(): HTMLElement {
       left,
       readout,
       right,
+      more,
       h(
         'button',
         { type: 'button', class: 'btn primary dc-today', onclick: () => setDate(todayJDN()) },

@@ -94,8 +94,9 @@ export function mountTimeline(root: HTMLElement): () => void {
 
   // Window in t coordinates: [start, start + span).
   const initYear = jdnToGregorian(getState().jdn).year;
-  let start = gregorianToJDN(initYear, 1, 1);
-  let span = 366;
+  const phone = window.innerWidth < 640;
+  let span = phone ? 49 : 366;
+  let start = phone ? getState().jdn + 0.5 - span / 2 : gregorianToJDN(initYear, 1, 1);
   let width = 1000;
   let hoverT: number | null = null;
   let hoverLane = -1;
@@ -106,7 +107,10 @@ export function mountTimeline(root: HTMLElement): () => void {
   const rangeLabel = h('output', { class: 'tl-range', 'aria-live': 'polite' });
 
   const lanes = () => lanesAll.filter((c) => !hiddenLanes.has(c.id));
-  const labelW = () => (width < 640 ? 96 : 176);
+  const narrow = () => width < 640;
+  const labelW = () => (narrow() ? 8 : 176);
+  const laneH = () => (narrow() ? 52 : LANE_H);
+  const barOff = () => (narrow() ? 18 : 2);
 
   let stopAnim: (() => void) | null = null;
 
@@ -154,7 +158,7 @@ export function mountTimeline(root: HTMLElement): () => void {
     const plotW = Math.max(200, width - L - 8);
     const x = (t: number) => L + ((t - start) / span) * plotW;
     const ls = lanes();
-    const height = AXIS_H + STRIP_H + ls.length * LANE_H + 6;
+    const height = AXIS_H + STRIP_H + ls.length * laneH() + 6;
     const from = Math.floor(start) - 1;
     const to = Math.ceil(start + span) + 1;
     const parts: string[] = [];
@@ -230,12 +234,12 @@ export function mountTimeline(root: HTMLElement): () => void {
     const laneTop = AXIS_H + STRIP_H;
     // Lanes
     ls.forEach((cal, i) => {
-      const y = laneTop + i * LANE_H;
+      const y = laneTop + i * laneH();
       const fam = FAMILY_VAR[cal.family];
       const bands = cal.monthStarts(from, to);
       parts.push(`<g class="lane fam-${cal.family}" style="--fam:${fam}">`);
       parts.push(
-        `<rect class="lane-bg" x="${L}" y="${y}" width="${plotW}" height="${LANE_H - 2}"/>`,
+        `<rect class="lane-bg" x="${L}" y="${y}" width="${plotW}" height="${laneH() - 2}"/>`,
       );
       let prevYear: number | null = null;
       bands.forEach((b, bi) => {
@@ -246,11 +250,11 @@ export function mountTimeline(root: HTMLElement): () => void {
         if (x1 <= x0) return;
         const w = x1 - x0;
         parts.push(
-          `<rect class="band ${(bi + b.month) % 2 ? 'odd' : 'even'}${yearStart ? ' year-start' : ''}" x="${x0 + 1}" y="${y + 2}" width="${Math.max(1, w - 2)}" height="${LANE_H - 6}" rx="8" fill="url(#${(bi + b.month) % 2 ? 'tg' : 'tg2'}${i % LANE_TINTS.length}-${cal.family})"/>`,
+          `<rect class="band ${(bi + b.month) % 2 ? 'odd' : 'even'}${yearStart ? ' year-start' : ''}" x="${x0 + 1}" y="${y + barOff()}" width="${Math.max(1, w - 2)}" height="${LANE_H - 6}" rx="8" fill="url(#${(bi + b.month) % 2 ? 'tg' : 'tg2'}${i % LANE_TINTS.length}-${cal.family})"/>`,
         );
         if (yearStart && x(b.start) >= L) {
           parts.push(
-            `<line class="year-line" x1="${x(b.start)}" x2="${x(b.start)}" y1="${y}" y2="${y + LANE_H - 2}"/>`,
+            `<line class="year-line" x1="${x(b.start)}" x2="${x(b.start)}" y1="${y + barOff() - 2}" y2="${y + barOff() + LANE_H - 4}"/>`,
           );
         }
         const fullW = x(b.end) - x(b.start);
@@ -259,20 +263,18 @@ export function mountTimeline(root: HTMLElement): () => void {
         const t = fit(label, maxChars);
         if (t && fullW > 18) {
           const tx = Math.max(x0, x(b.start)) + 4;
-          parts.push(
-            `<text class="band-text" x="${tx}" y="${y + LANE_H / 2 + 3}">${esc(t)}</text>`,
-          );
+          parts.push(`<text class="band-text" x="${tx}" y="${y + barOff() + 18}">${esc(t)}</text>`);
         }
       });
       parts.push('</g>');
-      const nameChars = Math.floor((L - 24) / 6.6);
+      const nameChars = narrow() ? 99 : Math.floor((L - 24) / 6.6);
       const nm = cal.name.length > nameChars ? cal.name.slice(0, nameChars - 1) + '.' : cal.name;
       parts.push(
-        `<g class="lane-name" style="--fam:${fam}"><circle cx="8" cy="${y + LANE_H / 2 - 1}" r="3.5"/><text x="19" y="${y + LANE_H / 2 + 3}">${esc(nm)}</text></g>`,
+        `<g class="lane-name" style="--fam:${fam}"><circle cx="${narrow() ? 14 : 8}" cy="${narrow() ? y + 10 : y + LANE_H / 2 - 1}" r="3.5"/><text x="${narrow() ? 24 : 19}" y="${narrow() ? y + 14 : y + LANE_H / 2 + 3}">${esc(nm)}</text></g>`,
       );
     });
 
-    const bottom = laneTop + ls.length * LANE_H;
+    const bottom = laneTop + ls.length * laneH();
     // Event lines and markers
     for (const { ev, cls } of eventsShown) {
       const xx = x(tOfMs(ev.time));
@@ -312,7 +314,7 @@ export function mountTimeline(root: HTMLElement): () => void {
         );
         if (hoverLane >= 0 && hoverLane < ls.length) {
           parts.push(
-            `<rect class="hover-lane" x="${L}" y="${laneTop + hoverLane * LANE_H}" width="${plotW}" height="${LANE_H - 2}"/>`,
+            `<rect class="hover-lane" x="${L}" y="${laneTop + hoverLane * laneH()}" width="${plotW}" height="${laneH() - 2}"/>`,
           );
         }
       }
@@ -341,7 +343,7 @@ export function mountTimeline(root: HTMLElement): () => void {
     const px = e.clientX - r.left;
     const py = e.clientY - r.top;
     const t = start + ((px - L) / plotW) * span;
-    const lane = Math.floor((py - (AXIS_H + STRIP_H)) / LANE_H);
+    const lane = Math.floor((py - (AXIS_H + STRIP_H)) / laneH());
     return { t, lane, inPlot: px >= L && px <= L + plotW };
   }
 
