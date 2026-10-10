@@ -34,3 +34,10 @@
     animation: none;
   }
 }
+
+/* The selected-day card rides over the month grid on phones, so it must be opaque. */
+@media (max-width: 1000px) {
+  .orr-detail.panel.glass {
+    background: var(--glass), var(--bg-2);
+  }
+}

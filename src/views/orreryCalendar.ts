@@ -88,7 +88,7 @@ export function mountOrreryCalendar(root: HTMLElement): () => void {
       h(
         'div',
         { class: 'muted od-label' },
-        hoverJdn === null ? 'Selected day' : 'Under the pointer',
+        hoverJdn === null || hoverJdn === getState().jdn ? 'Selected day' : 'Under the pointer',
       ),
       h('div', { class: 'big' }, `${d.day} ${month} ${d.year}`),
       h(

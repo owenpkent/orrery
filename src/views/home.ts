@@ -10,6 +10,9 @@ import { reducedMotion, setText, transition } from '../ui/fx';
 import { FAMILY_VAR } from '../ui/format';
 import type { SceneHandle } from '../scene/orreryScene';
 
+/** Wait this long after the load event before fetching the 3D scene. */
+const SCENE_DELAY_MS = 1500;
+
 const STRIP = ['hebrew', 'islamic-umalqura', 'chinese', 'maya', 'persian', 'orrery'];
 
 function webglAvailable(): boolean {
@@ -32,17 +35,23 @@ function lowPower(): boolean {
   );
 }
 
-/** Run `fn` once the page has loaded and the main thread is idle, so three.js never delays first paint. */
+/**
+ * Run `fn` once the page has loaded, a beat later (so fonts and first interactions get the bandwidth),
+ * and the main thread is idle. three.js is ~140 kB gzipped and must never delay first paint.
+ */
 function whenIdle(fn: () => void): () => void {
   let cancelled = false;
   let handle = 0;
+  let idle = 0;
   const run = () => {
-    if (cancelled) return;
-    const w = window as Window & {
-      requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number;
-    };
-    if (w.requestIdleCallback) handle = w.requestIdleCallback(fn, { timeout: 2500 });
-    else handle = window.setTimeout(fn, 1200);
+    handle = window.setTimeout(() => {
+      if (cancelled) return;
+      const w = window as Window & {
+        requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number;
+      };
+      if (w.requestIdleCallback) idle = w.requestIdleCallback(fn, { timeout: 2500 });
+      else fn();
+    }, SCENE_DELAY_MS);
   };
   if (document.readyState === 'complete') run();
   else window.addEventListener('load', run, { once: true });
@@ -50,7 +59,7 @@ function whenIdle(fn: () => void): () => void {
     cancelled = true;
     window.removeEventListener('load', run);
     window.clearTimeout(handle);
-    (window as Window & { cancelIdleCallback?: (h: number) => void }).cancelIdleCallback?.(handle);
+    (window as Window & { cancelIdleCallback?: (h: number) => void }).cancelIdleCallback?.(idle);
   };
 }
 
@@ -150,30 +159,31 @@ export function mountHome(root: HTMLElement): () => void {
   strip.addEventListener('pointerenter', () => (auto = false));
   strip.addEventListener('pointerleave', () => (auto = !reducedMotion()));
 
+  // The hero copy is the LCP element: it paints at once, with no fade-in.
   const copy = h(
     'div',
     { class: 'hero-copy' },
     h(
       'span',
-      { class: 'pill eyebrow', 'data-reveal': '', 'data-i': '0' },
+      { class: 'pill eyebrow' },
       h('span', { class: 'live-dot' }),
       `Live sky · ${CALENDARS.length} calendars`,
     ),
     h(
       'h1',
-      { class: 'hero-title display', 'data-reveal': '', 'data-i': '1' },
+      { class: 'hero-title display' },
       'Every calendar on Earth, ',
       h('em', {}, 'under one sky.'),
     ),
     h(
       'p',
-      { class: 'hero-sub', 'data-reveal': '', 'data-i': '2' },
+      { class: 'hero-sub' },
       'Humanity counts the days in dozens of ways. Orrery lines them all up against the real sky, with solstices, moons and eclipses computed live. Drag Earth round its orbit and every calendar follows.',
     ),
-    h('div', { 'data-reveal': '', 'data-i': '3' }, strip),
+    h('div', {}, strip),
     h(
       'div',
-      { class: 'cta-row', 'data-reveal': '', 'data-i': '4' },
+      { class: 'cta-row' },
       link('today', 'btn primary cta', 'See today in every calendar ', arrow()),
       link('timeline', 'btn cta', 'Open the timeline'),
       link('ring', 'btn cta ghost', 'Orrery ring'),

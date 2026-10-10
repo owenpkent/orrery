@@ -22,7 +22,8 @@ body {
     'cv11' 1,
     'ss03' 1;
   -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
+  /* clip, not hidden: hidden would make body a scroll container and break every position: sticky. */
+  overflow-x: clip;
 }
 
 #app {

@@ -436,7 +436,7 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scen
     const dist = Math.max(need, 21);
     camera.position.set(0, Math.sin(tilt) * dist, Math.cos(tilt) * dist);
     camera.lookAt(0, 0, 0);
-    if (aspect > 1.2) {
+    if (aspect > 1.2 && w >= 760) {
       // sun to the right of centre so the headline has room on the left
       camera.setViewOffset(w, h, -w * 0.13, h * 0.02, w, h);
     } else {

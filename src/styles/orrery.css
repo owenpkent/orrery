@@ -515,7 +515,7 @@
     font-size: 1.7rem;
   }
   .orr-detail .od-label {
-    font-size: 0.78rem;
+    display: none;
   }
   .orr-detail .od-doy {
     display: none;

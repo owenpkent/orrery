@@ -7,21 +7,23 @@ them as swimlanes against the sky's solstices, equinoxes, moons and eclipses, wr
 Sun as concentric rings, and presents one new invented calendar anchored to the real December
 solstice.
 
-Everything is mouse-driven: no typing is ever needed. Date steppers hold-to-repeat, a slider scrubs
-1900 to 2100, and the charts pan, zoom and select by dragging, scrolling and clicking. It is also
-keyboard accessible and responsive. It is dark-first (a deep-space observatory look with glass panels, film grain and motion that respects `prefers-reduced-motion`), with a full light theme.
+Everything is mouse- and touch-driven: no typing is ever needed. Date steppers hold-to-repeat, a
+slider scrubs 1900 to 2100, and the charts pan, zoom and select by dragging, scrolling and clicking,
+or on a phone by dragging, pinching and tapping. It is also keyboard accessible, responsive, and
+installable as a home-screen app (web manifest and a small offline service worker). It is dark-first (a deep-space observatory look with glass panels, film grain and motion that respects `prefers-reduced-motion`), with a full light theme.
 
 ## The views
 
 - **Home**: a live WebGL scene (three.js, lazy-loaded) with the Sun, Earth at its real position for the
   selected date, and the Moon at its real phase. Drag Earth around its orbit to change the date.
-  A strip cycles the date through several calendars. Falls back to a static scene without WebGL.
+  A strip cycles the date through several calendars. The scene loads after first paint; a CSS poster
+  stands in until then, and permanently with reduced motion, data saver, a low-end device or no WebGL.
 - **Today**: the chosen date in every calendar as cards grouped by family (solar, lunar, lunisolar,
   day counts, invented), plus the moon phase and the nearest solstice, equinox, new and full moon,
   eclipses and apsis.
 - **Timeline**: one lane per calendar with month bands across a window (a Gregorian year by
-  default). Drag to pan, scroll to zoom, hover for the date in that lane's calendar, click to pick
-  a day. Heavy lines mark where each calendar starts a year. Toggle sky events and lanes.
+  default). Drag to pan, scroll or pinch to zoom, hover (or tap) for the date in that lane's
+  calendar, click to pick a day. Heavy lines mark where each calendar starts a year. Toggle sky events and lanes.
 - **Orrery ring**: one solstice-to-solstice orbit around the Sun with Earth at its true position and
   the months of the calendars you choose as concentric rings.
 - **Orrery calendar**: the invented calendar's year as 13 month cards, softly lit workdays, calm days off, a

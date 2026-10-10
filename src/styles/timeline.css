@@ -334,8 +334,7 @@
     padding: 2px 4px 0;
     text-align: left;
   }
-  .lanes-box summary,
-  .toggle-group legend {
+  .lanes-box summary {
     min-height: 44px;
   }
 }
