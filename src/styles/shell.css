@@ -393,13 +393,17 @@
 
 @media (max-width: 480px) {
   .brand {
-    display: none;
+    padding: 0 4px 0 6px;
+  }
+  .tab {
+    padding: 0 6px;
+    font-size: 0.78rem;
   }
 }
 
 @media (max-width: 760px) {
   :root {
-    --dock-h: 170px;
+    --dock-h: 200px;
   }
   .brand-name {
     display: none;

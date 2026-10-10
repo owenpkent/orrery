@@ -227,6 +227,7 @@
 }
 
 .orr-day.off::after {
+  display: none;
   content: '';
   position: absolute;
   top: 5px;
@@ -331,6 +332,8 @@
 }
 
 .orr-month.festival .orr-day.off::after {
+  display: none;
+  display: none;
   background: var(--gold);
 }
 

@@ -53,8 +53,9 @@ export function reveal(root: ParentNode): () => void {
 /** Set text and replay a short swap animation when it changed. */
 export function setText(el: HTMLElement, text: string): void {
   if (el.textContent === text) return;
+  const first = !el.textContent;
   el.textContent = text;
-  if (reducedMotion()) return;
+  if (first || reducedMotion()) return;
   el.classList.remove('tick');
   void el.offsetWidth;
   el.classList.add('tick');

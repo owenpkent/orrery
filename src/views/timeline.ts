@@ -15,6 +15,8 @@ const LANE_H = 34;
 const AXIS_H = 44;
 const STRIP_H = 36;
 const MS_PER_DAY = 86400000;
+/** Per-lane tints so neighbouring lanes of one family stay distinguishable. */
+const LANE_TINTS = ['X', 'color-mix(in srgb, X 62%, white)', 'color-mix(in srgb, X 70%, #3a2a8a)'];
 
 /** t coordinates: civil day j spans [j, j + 1). Event instants map to ms / day + 2440588. */
 const tOfMs = (ms: number) => ms / MS_PER_DAY + 2440588;
@@ -162,10 +164,14 @@ export function mountTimeline(root: HTMLElement): () => void {
     parts.push(
       '<defs>' +
         Object.keys(FAMILY_VAR)
-          .map(
-            (f) =>
-              `<linearGradient id="tg-${f}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" style="stop-color:${FAMILY_VAR[f]};stop-opacity:.62"/><stop offset="1" style="stop-color:${FAMILY_VAR[f]};stop-opacity:.24"/></linearGradient>` +
-              `<linearGradient id="tg2-${f}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" style="stop-color:${FAMILY_VAR[f]};stop-opacity:.34"/><stop offset="1" style="stop-color:${FAMILY_VAR[f]};stop-opacity:.1"/></linearGradient>`,
+          .flatMap((f) =>
+            LANE_TINTS.map((mix, v) => {
+              const c = mix.replace('X', FAMILY_VAR[f]);
+              return (
+                `<linearGradient id="tg${v}-${f}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" style="stop-color:${c};stop-opacity:.64"/><stop offset="1" style="stop-color:${c};stop-opacity:.26"/></linearGradient>` +
+                `<linearGradient id="tg2${v}-${f}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" style="stop-color:${c};stop-opacity:.36"/><stop offset="1" style="stop-color:${c};stop-opacity:.12"/></linearGradient>`
+              );
+            }),
           )
           .join('') +
         '</defs>',
@@ -240,7 +246,7 @@ export function mountTimeline(root: HTMLElement): () => void {
         if (x1 <= x0) return;
         const w = x1 - x0;
         parts.push(
-          `<rect class="band ${(bi + b.month) % 2 ? 'odd' : 'even'}${yearStart ? ' year-start' : ''}" x="${x0 + 1}" y="${y + 2}" width="${Math.max(1, w - 2)}" height="${LANE_H - 6}" rx="8" fill="url(#${(bi + b.month) % 2 ? 'tg' : 'tg2'}-${cal.family})"/>`,
+          `<rect class="band ${(bi + b.month) % 2 ? 'odd' : 'even'}${yearStart ? ' year-start' : ''}" x="${x0 + 1}" y="${y + 2}" width="${Math.max(1, w - 2)}" height="${LANE_H - 6}" rx="8" fill="url(#${(bi + b.month) % 2 ? 'tg' : 'tg2'}${i % LANE_TINTS.length}-${cal.family})"/>`,
         );
         if (yearStart && x(b.start) >= L) {
           parts.push(
