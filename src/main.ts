@@ -1,7 +1,4 @@
-import '@fontsource/instrument-serif/400.css';
-import '@fontsource/instrument-serif/400-italic.css';
-import '@fontsource-variable/inter';
-import '@fontsource-variable/jetbrains-mono';
+import './styles/fonts.css';
 import './styles/tokens.css';
 import './styles/base.css';
 import './styles/shell.css';
@@ -195,4 +192,14 @@ function boot(): void {
   show();
 }
 
+function registerServiceWorker(): void {
+  if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return;
+  const register = () => {
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => undefined);
+  };
+  // Never compete with first paint or the hero scene: register once the page has settled.
+  window.addEventListener('load', () => window.setTimeout(register, 4000), { once: true });
+}
+
 boot();
+registerServiceWorker();
