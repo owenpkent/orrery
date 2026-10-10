@@ -43,6 +43,8 @@ export interface SceneOptions {
 }
 
 export interface SceneHandle {
+  /** Resolves once shaders are compiled and the first frame can be drawn without a hitch. */
+  ready: Promise<void>;
   setJdn(jdn: number, instant?: boolean): void;
   /** Orbital angle (degrees, counter-clockwise from above) under a pointer, or null. */
   angleAt(clientX: number, clientY: number): number | null;
@@ -52,14 +54,14 @@ export interface SceneHandle {
 }
 
 const R = 10;
-const NOISE = /* glsl */ `
+const noise = (octaves: number) => /* glsl */ `
 float hash(vec3 p){ p=fract(p*0.3183099+.1); p*=17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
 float noise(vec3 x){
   vec3 i=floor(x); vec3 f=fract(x); f=f*f*(3.0-2.0*f);
   return mix(mix(mix(hash(i),hash(i+vec3(1,0,0)),f.x),mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x),f.y),
              mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x),mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x),f.y),f.z);
 }
-float fbm(vec3 p){ float a=.5,s=0.; for(int i=0;i<5;i++){ s+=a*noise(p); p*=2.03; a*=.5; } return s; }
+float fbm(vec3 p){ float a=.5,s=0.; for(int i=0;i<${octaves};i++){ s+=a*noise(p); p*=2.03; a*=.5; } return s; }
 `;
 
 const EARTH_VERT = /* glsl */ `
@@ -71,10 +73,10 @@ void main(){
   gl_Position = projectionMatrix * viewMatrix * vec4(vWorld,1.);
 }`;
 
-const EARTH_FRAG = /* glsl */ `
+const earthFrag = (octaves: number) => /* glsl */ `
 varying vec3 vPos; varying vec3 vN; varying vec3 vWorld;
 uniform vec3 uSun; uniform float uTime;
-${NOISE}
+${noise(octaves)}
 void main(){
   vec3 p = normalize(vPos);
   float h = fbm(p*2.2+3.1);
@@ -109,9 +111,9 @@ void main(){
   gl_FragColor = vec4(vec3(.3,.6,1.)*rim*1.6, rim*1.2);
 }`;
 
-const SUN_FRAG = /* glsl */ `
+const sunFrag = (octaves: number) => /* glsl */ `
 varying vec3 vPos; varying vec3 vN; varying vec3 vWorld; uniform float uTime;
-${NOISE}
+${noise(octaves)}
 void main(){
   vec3 p = normalize(vPos);
   float t = fbm(p*3.+vec3(0.,uTime*.05,0.));
@@ -124,24 +126,26 @@ void main(){
   gl_FragColor = vec4(c,1.);
 }`;
 
-function radialTexture(stops: [number, string][]): CanvasTexture {
+function radialTexture(stops: [number, string][], size = 256): CanvasTexture {
   const c = document.createElement('canvas');
-  c.width = c.height = 256;
+  c.width = c.height = size;
   const g = c.getContext('2d')!;
-  const gr = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+  const hs = size / 2;
+  const gr = g.createRadialGradient(hs, hs, 0, hs, hs, hs);
   for (const [o, col] of stops) gr.addColorStop(o, col);
   g.fillStyle = gr;
-  g.fillRect(0, 0, 256, 256);
+  g.fillRect(0, 0, size, size);
   const t = new CanvasTexture(c);
   t.colorSpace = SRGBColorSpace;
   return t;
 }
 
-function moonTexture(): CanvasTexture {
+function moonTexture(lite: boolean): CanvasTexture {
   const c = document.createElement('canvas');
-  c.width = 256;
-  c.height = 128;
+  c.width = lite ? 128 : 256;
+  c.height = lite ? 64 : 128;
   const g = c.getContext('2d')!;
+  g.scale(c.width / 256, c.height / 128);
   g.fillStyle = '#b9b7b2';
   g.fillRect(0, 0, 256, 128);
   let s = 7;
@@ -160,7 +164,7 @@ function moonTexture(): CanvasTexture {
   return t;
 }
 
-function stars(count: number, radius: number, size: number, seed: number): Points {
+function stars(count: number, radius: number, size: number, seed: number, texSize = 256): Points {
   let s = seed;
   const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
   const pos = new Float32Array(count * 3);
@@ -195,11 +199,14 @@ function stars(count: number, radius: number, size: number, seed: number): Point
     transparent: true,
     depthWrite: false,
     blending: AdditiveBlending,
-    map: radialTexture([
-      [0, 'rgba(255,255,255,1)'],
-      [0.35, 'rgba(255,255,255,.7)'],
-      [1, 'rgba(255,255,255,0)'],
-    ]),
+    map: radialTexture(
+      [
+        [0, 'rgba(255,255,255,1)'],
+        [0.35, 'rgba(255,255,255,.7)'],
+        [1, 'rgba(255,255,255,0)'],
+      ],
+      texSize,
+    ),
   });
   return new Points(geo, mat);
 }
@@ -225,10 +232,11 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scen
     canvas,
     alpha: true,
     antialias: !opts.lite,
-    powerPreference: 'high-performance',
+    powerPreference: opts.lite ? 'default' : 'high-performance',
   });
   renderer.setClearColor(0x000000, 0);
-  const maxDpr = opts.lite ? 1.25 : 1.75;
+  const maxDpr = opts.lite ? 1.5 : 1.75;
+  const seg = (full: number, lite: number) => (opts.lite ? lite : full);
 
   const scene = new Scene();
   const camera = new PerspectiveCamera(38, 1, 0.1, 400);
@@ -236,24 +244,27 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scen
   scene.add(rig);
 
   // starfield (outside the rig so it only parallaxes)
-  const farStars = stars(opts.lite ? 700 : 2200, 160, 1.6, 11);
-  const nearStars = stars(opts.lite ? 120 : 420, 120, 2.8, 29);
+  const farStars = stars(opts.lite ? 520 : 2200, 160, 1.6, 11, seg(256, 64));
+  const nearStars = stars(opts.lite ? 90 : 420, 120, 2.8, 29, seg(256, 64));
   scene.add(farStars, nearStars);
 
   // sun
   const sunMat = new ShaderMaterial({
     vertexShader: EARTH_VERT,
-    fragmentShader: SUN_FRAG,
+    fragmentShader: sunFrag(opts.lite ? 3 : 5),
     uniforms: { uTime: { value: 0 } },
   });
-  const sun = new Mesh(new SphereGeometry(2.0, 48, 32), sunMat);
+  const sun = new Mesh(new SphereGeometry(2.0, seg(48, 28), seg(32, 18)), sunMat);
   rig.add(sun);
-  const glowTex = radialTexture([
-    [0, 'rgba(255,214,130,0.95)'],
-    [0.12, 'rgba(255,170,70,0.55)'],
-    [0.4, 'rgba(255,120,40,0.14)'],
-    [1, 'rgba(255,100,30,0)'],
-  ]);
+  const glowTex = radialTexture(
+    [
+      [0, 'rgba(255,214,130,0.95)'],
+      [0.12, 'rgba(255,170,70,0.55)'],
+      [0.4, 'rgba(255,120,40,0.14)'],
+      [1, 'rgba(255,100,30,0)'],
+    ],
+    seg(256, 128),
+  );
   const glowA = new Sprite(
     new SpriteMaterial({ map: glowTex, blending: AdditiveBlending, depthWrite: false }),
   );
@@ -273,7 +284,7 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scen
   rig.add(glowA, glowB);
 
   // orbit furniture: guide rings, month divisions, travelled arc
-  rig.add(ringLine(R, 0.34, '#9db4ff', 220));
+  rig.add(ringLine(R, 0.34, '#9db4ff', seg(220, 120)));
   rig.add(ringLine(R * 0.78, 0.1, '#9db4ff'));
   rig.add(ringLine(R * 0.58, 0.07, '#9db4ff'));
   let divisions: LineSegments | null = null;
@@ -298,14 +309,14 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scen
   rig.add(earthGroup);
   const earthMat = new ShaderMaterial({
     vertexShader: EARTH_VERT,
-    fragmentShader: EARTH_FRAG,
+    fragmentShader: earthFrag(opts.lite ? 3 : 5),
     uniforms: { uSun: { value: new Vector3(-1, 0, 0) }, uTime: { value: 0 } },
   });
-  const earth = new Mesh(new SphereGeometry(0.8, 64, 48), earthMat);
+  const earth = new Mesh(new SphereGeometry(0.8, seg(64, 36), seg(48, 26)), earthMat);
   earth.rotation.z = rad(23.4);
   earthGroup.add(earth);
   const atmo = new Mesh(
-    new SphereGeometry(0.8 * 1.16, 48, 32),
+    new SphereGeometry(0.8 * 1.16, seg(48, 24), seg(32, 16)),
     new ShaderMaterial({
       vertexShader: EARTH_VERT,
       fragmentShader: ATMO_FRAG,
@@ -336,11 +347,11 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scen
   const moonPivot = new Group();
   earthGroup.add(moonPivot);
   const moon = new Mesh(
-    new SphereGeometry(0.21, 32, 24),
-    new MeshLambertMaterial({ map: moonTexture() }),
+    new SphereGeometry(0.21, seg(32, 16), seg(24, 12)),
+    new MeshLambertMaterial({ map: moonTexture(opts.lite) }),
   );
   moonPivot.add(moon);
-  const moonOrbit = ringLine(1.6, 0.16, '#ffffff', 64);
+  const moonOrbit = ringLine(1.6, 0.16, '#ffffff', seg(64, 40));
   earthGroup.add(moonOrbit);
   const sunLight = new PointLight(0xfff0d8, 900, 0, 2);
   rig.add(sunLight, new AmbientLight(0x303850, 0.5));
@@ -361,7 +372,11 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scen
   let smx = 0;
   let smy = 0;
   let dirty = true;
+  let compiled = false;
+  let lastDraw = 0;
   const still = reducedMotion();
+  // Phones render at 30 fps while idle; a drag or a date change still runs at full rate.
+  const idleFrameMs = opts.lite ? 1000 / 30 : 0;
 
   const unit = (deg: number) => new Vector3(Math.cos(rad(deg)), 0, -Math.sin(rad(deg)));
 
@@ -459,7 +474,17 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scen
 
   function frame(now: number) {
     raf = 0;
-    if (!active) return;
+    if (!active || !compiled) return;
+    if (
+      idleFrameMs &&
+      !dirty &&
+      Math.abs(targetAngle - curAngle) < 0.01 &&
+      now - lastDraw < idleFrameMs - 2
+    ) {
+      schedule();
+      return;
+    }
+    lastDraw = now;
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     time += dt;
@@ -488,7 +513,7 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scen
   }
 
   function schedule() {
-    if (raf || !active) return;
+    if (raf || !active || !compiled) return;
     if (still && !dirty) return;
     raf = requestAnimationFrame(frame);
   }
@@ -502,6 +527,7 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scen
   if (!still) window.addEventListener('pointermove', onMove, { passive: true });
 
   const api: SceneHandle = {
+    ready: Promise.resolve(),
     setJdn(jdn, instant = false) {
       const win = windowFor(jdn);
       arcStart = win.angle0;
@@ -562,5 +588,15 @@ export function createScene(canvas: HTMLCanvasElement, opts: SceneOptions): Scen
     },
   };
   layout();
+  // Compile shaders off the main thread where the browser allows it, then start drawing.
+  api.ready = renderer
+    .compileAsync(scene, camera)
+    .catch(() => undefined)
+    .then(() => {
+      compiled = true;
+      dirty = true;
+      last = performance.now();
+      schedule();
+    });
   return api;
 }

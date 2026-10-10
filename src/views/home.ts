@@ -21,13 +21,37 @@ function webglAvailable(): boolean {
   }
 }
 
+/** Devices that should get the static poster instead of the live 3D scene. */
 function lowPower(): boolean {
   const n = navigator as Navigator & { deviceMemory?: number; connection?: { saveData?: boolean } };
   return (
+    reducedMotion() ||
     (n.hardwareConcurrency ?? 8) <= 2 ||
     (n.deviceMemory ?? 8) <= 2 ||
     n.connection?.saveData === true
   );
+}
+
+/** Run `fn` once the page has loaded and the main thread is idle, so three.js never delays first paint. */
+function whenIdle(fn: () => void): () => void {
+  let cancelled = false;
+  let handle = 0;
+  const run = () => {
+    if (cancelled) return;
+    const w = window as Window & {
+      requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number;
+    };
+    if (w.requestIdleCallback) handle = w.requestIdleCallback(fn, { timeout: 2500 });
+    else handle = window.setTimeout(fn, 1200);
+  };
+  if (document.readyState === 'complete') run();
+  else window.addEventListener('load', run, { once: true });
+  return () => {
+    cancelled = true;
+    window.removeEventListener('load', run);
+    window.clearTimeout(handle);
+    (window as Window & { cancelIdleCallback?: (h: number) => void }).cancelIdleCallback?.(handle);
+  };
 }
 
 function go(view: ViewId): (e: Event) => void {
@@ -308,21 +332,34 @@ export function mountHome(root: HTMLElement): () => void {
   cleanups.push(() => ro.disconnect());
 
   if (webglAvailable() && !lowPower()) {
-    void import('../scene/orreryScene')
-      .then(({ createScene }) => {
-        if (disposed) return;
-        scene = createScene(canvas, {
-          lite: window.innerWidth < 760,
-          onEarth: (x, y, r) => {
-            handle.style.setProperty('--x', `${x.toFixed(1)}px`);
-            handle.style.setProperty('--y', `${y.toFixed(1)}px`);
-            handle.style.setProperty('--r', `${Math.max(14, r).toFixed(1)}px`);
-          },
-        });
-        scene.setJdn(getState().jdn, true);
-        stage.classList.add('gl');
-      })
-      .catch(() => stage.classList.add('no-gl'));
+    // The poster (pure CSS) is already on screen; the scene arrives later and fades in over it.
+    const cancel = whenIdle(() => {
+      void import('../scene/orreryScene')
+        .then(async ({ createScene }) => {
+          if (disposed) return;
+          const s = createScene(canvas, {
+            lite: window.innerWidth < 760 || matchMedia('(pointer: coarse)').matches,
+            onEarth: (x, y, r) => {
+              handle.style.setProperty('--x', `${x.toFixed(1)}px`);
+              handle.style.setProperty('--y', `${y.toFixed(1)}px`);
+              handle.style.setProperty('--r', `${Math.max(14, r).toFixed(1)}px`);
+            },
+          });
+          s.setJdn(getState().jdn, true);
+          await s.ready;
+          if (disposed) {
+            s.dispose();
+            return;
+          }
+          scene = s;
+          scene.setJdn(getState().jdn, true);
+          scene.setActive(visible && !document.hidden);
+          stage.classList.add('gl');
+          hero.classList.add('has-gl');
+        })
+        .catch(() => stage.classList.add('no-gl'));
+    });
+    cleanups.push(cancel);
   } else {
     stage.classList.add('no-gl');
   }
