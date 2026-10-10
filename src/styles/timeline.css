@@ -100,6 +100,25 @@
   animation: tip-in 0.18s var(--ease);
 }
 
+.tl-tip:has(.tl-tip-x) {
+  pointer-events: auto;
+  padding-right: 52px;
+}
+
+.tl-tip-x {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--text-soft);
+  font: 400 1.5rem/1 var(--font-ui);
+  cursor: pointer;
+}
+
 .tl-tip[hidden] {
   display: none;
 }
@@ -294,19 +313,29 @@
 
 @media (max-width: 700px) {
   .tl-controls {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-  .tl-controls > * {
-    flex: none;
-  }
-  .tl-range {
-    margin-left: 0;
-    white-space: nowrap;
+    gap: 8px;
+    padding: 10px;
   }
   .tl-controls .btn {
-    padding: 0 10px;
-    font-size: 0.82rem;
+    padding: 0 14px;
+    font-size: 0.88rem;
+  }
+  .tl-controls .btn.step-btn {
+    width: 44px;
+    padding: 0;
+    font-size: 1.15rem;
+  }
+  .tl-wide-only {
+    display: none;
+  }
+  .tl-range {
+    flex: 1 0 100%;
+    margin-left: 0;
+    padding: 2px 4px 0;
+    text-align: left;
+  }
+  .lanes-box summary,
+  .toggle-group legend {
+    min-height: 44px;
   }
 }

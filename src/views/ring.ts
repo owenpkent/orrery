@@ -49,7 +49,25 @@ function arcPath(r: number, a0: number, a1: number): string {
 
 export function mountRing(root: HTMLElement): () => void {
   const on = new Set(DEFAULT_ON);
-  const host = h('div', { class: 'ring-host' });
+  const host = h('div', { class: 'ring-slot' });
+  // Touch can only drag Earth from this overlay (touch-action: none lives here and nowhere else on the
+  // ring), so a finger on the rings still scrolls the page. Mouse users drag anywhere on the rings.
+  const handle = h('div', { class: 'ring-handle', 'aria-hidden': 'true' });
+  const tipBox = h('div', { class: 'ring-tip', role: 'status', 'aria-live': 'polite' });
+  const tipHint = matchMedia('(hover: none)').matches
+    ? 'Tap a ring to see which month it is.'
+    : 'Hover a ring to see which month it is.';
+  const showTip = (data?: string) => {
+    clear(tipBox);
+    if (!data) {
+      tipBox.append(h('span', { class: 'muted' }, tipHint));
+      return;
+    }
+    const [name, month, starts] = data.split('|');
+    tipBox.append(h('strong', {}, name), ' ', month, h('span', { class: 'muted' }, ` (${starts})`));
+  };
+  showTip();
+  const stage = h('div', { class: 'ring-host' }, host, handle);
 
   const infoDate = h('p', { class: 'ring-date display' });
   const infoWeekday = h('span', { class: 'eyebrow' });
@@ -89,6 +107,8 @@ export function mountRing(root: HTMLElement): () => void {
     const ex = px(R_ORBIT, ang);
     const ey = py(R_ORBIT, ang);
     earthG.setAttribute('transform', `translate(${ex} ${ey})`);
+    handle.style.left = `${(((ex - VB.x) / VB.w) * 100).toFixed(3)}%`;
+    handle.style.top = `${(((ey - VB.y) / VB.h) * 100).toFixed(3)}%`;
     earthLine.setAttribute('x2', String(ex));
     earthLine.setAttribute('y2', String(ey));
     const d = arcPath(R_ORBIT, win.angle0, Math.max(win.angle0 + 0.01, ang));
@@ -130,8 +150,9 @@ export function mountRing(root: HTMLElement): () => void {
         const a0 = angleOf(w, s);
         const a1 = angleOf(w, e);
         const tip = `${cal.name}: ${b.label} ${b.year}`;
+        const data = `${cal.name}|${b.label} ${b.year}|starts ${describeGregorian(b.start)}`;
         parts.push(
-          `<path class="seg ${(bi + b.month) % 2 ? 'odd' : 'even'}${yearStart ? ' year-start' : ''}" d="${sector(rIn, rOut, a0, a1)}"><title>${esc(tip)}</title></path>`,
+          `<path class="seg ${(bi + b.month) % 2 ? 'odd' : 'even'}${yearStart ? ' year-start' : ''}" data-tip="${esc(data)}" d="${sector(rIn, rOut, a0, a1)}"><title>${esc(tip)}</title></path>`,
         );
         const mid = (a0 + a1) / 2;
         const rMid = (rIn + rOut) / 2;
@@ -202,28 +223,77 @@ export function mountRing(root: HTMLElement): () => void {
     return { deg: (Math.atan2(sy, sx) * 180) / Math.PI, radius: Math.hypot(sx, sy) };
   }
 
+  function startDrag(ev: PointerEvent, el: Element, deg: number) {
+    ev.preventDefault();
+    el.setPointerCapture(ev.pointerId);
+    dragging = new OrbitDrag(getState().jdn);
+    host.querySelector('svg')?.classList.add('dragging');
+    stopTween?.();
+    setDate(dragging.update(deg));
+  }
+  const endDrag = () => {
+    dragging = null;
+    host.querySelector('svg')?.classList.remove('dragging');
+  };
+
+  // Touch drag: only from the overlay that sits on Earth.
+  handle.addEventListener('pointerdown', (ev) => {
+    const svg = host.querySelector('svg');
+    if (!svg || (ev.pointerType === 'mouse' && ev.button !== 0)) return;
+    startDrag(ev, handle, pointerAngle(svg, ev).deg);
+  });
+  handle.addEventListener('pointermove', (ev) => {
+    const svg = host.querySelector('svg');
+    if (dragging && svg) setDate(dragging.update(pointerAngle(svg, ev).deg));
+  });
+  handle.addEventListener('pointerup', endDrag);
+  handle.addEventListener('pointercancel', endDrag);
+
   function wire(svg: SVGSVGElement) {
+    // Mouse: drag from anywhere on the rings. Touch: a tap jumps to that point and explains the ring.
+    let tap: { x: number; y: number; data?: string; moved: boolean } | null = null;
     svg.addEventListener('pointerdown', (ev) => {
-      if (ev.button !== 0) return;
       const p = pointerAngle(svg, ev);
-      if (p.radius < R_SUN || p.radius > R_ORBIT + 24) return;
-      ev.preventDefault();
-      svg.setPointerCapture(ev.pointerId);
-      dragging = new OrbitDrag(getState().jdn);
-      svg.classList.add('dragging');
-      stopTween?.();
-      setDate(dragging.update(p.deg));
+      const onRings = p.radius >= R_SUN && p.radius <= R_ORBIT + 24;
+      if (ev.pointerType === 'mouse') {
+        if (ev.button !== 0 || !onRings) return;
+        startDrag(ev, svg, p.deg);
+        return;
+      }
+      const seg = (ev.target as Element).closest?.('.seg');
+      tap = {
+        x: ev.clientX,
+        y: ev.clientY,
+        data: seg?.getAttribute('data-tip') ?? undefined,
+        moved: false,
+      };
     });
     svg.addEventListener('pointermove', (ev) => {
-      if (!dragging) return;
-      setDate(dragging.update(pointerAngle(svg, ev).deg));
+      if (ev.pointerType !== 'mouse') {
+        if (tap && Math.hypot(ev.clientX - tap.x, ev.clientY - tap.y) > 9) tap.moved = true;
+        return;
+      }
+      if (dragging) setDate(dragging.update(pointerAngle(svg, ev).deg));
     });
-    const end = () => {
-      dragging = null;
-      svg.classList.remove('dragging');
-    };
-    svg.addEventListener('pointerup', end);
-    svg.addEventListener('pointercancel', end);
+    svg.addEventListener('pointerover', (ev) => {
+      if (ev.pointerType !== 'mouse' || dragging) return;
+      showTip((ev.target as Element).closest?.('.seg')?.getAttribute('data-tip') ?? undefined);
+    });
+    svg.addEventListener('pointerup', (ev) => {
+      if (ev.pointerType === 'mouse') return endDrag();
+      const t = tap;
+      tap = null;
+      if (!t || t.moved) return;
+      const p = pointerAngle(svg, ev);
+      if (p.radius >= R_SUN && p.radius <= R_ORBIT + 24) {
+        setDate(new OrbitDrag(getState().jdn).update(p.deg));
+        showTip(t.data);
+      }
+    });
+    svg.addEventListener('pointercancel', (ev) => {
+      tap = null;
+      if (ev.pointerType === 'mouse') endDrag();
+    });
     earthG.addEventListener('keydown', (ev) => {
       const j = getState().jdn;
       const k: Record<string, number> = {
@@ -301,7 +371,7 @@ export function mountRing(root: HTMLElement): () => void {
     h(
       'div',
       { class: 'ring-view' },
-      h('div', { class: 'ring-main panel glass', 'data-reveal': '', 'data-i': '1' }, host),
+      h('div', { class: 'ring-main panel glass', 'data-reveal': '', 'data-i': '1' }, stage, tipBox),
       h(
         'div',
         { class: 'ring-side' },

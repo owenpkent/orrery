@@ -85,7 +85,11 @@ export function mountOrreryCalendar(root: HTMLElement): () => void {
     clear(detail);
     const month = orreryMonthName(d.month);
     detail.append(
-      h('div', { class: 'muted' }, hoverJdn === null ? 'Selected day' : 'Under the pointer'),
+      h(
+        'div',
+        { class: 'muted od-label' },
+        hoverJdn === null ? 'Selected day' : 'Under the pointer',
+      ),
       h('div', { class: 'big' }, `${d.day} ${month} ${d.year}`),
       h(
         'div',
@@ -101,7 +105,7 @@ export function mountOrreryCalendar(root: HTMLElement): () => void {
         ),
       ),
       h('div', { class: 'equals' }, `= ${describeGregorian(jdn)} (Gregorian)`),
-      h('div', { class: 'muted' }, `Day ${d.dayOfYear + 1} of ${d.yearLength}`),
+      h('div', { class: 'muted od-doy' }, `Day ${d.dayOfYear + 1} of ${d.yearLength}`),
     );
   }
 
@@ -156,7 +160,9 @@ export function mountOrreryCalendar(root: HTMLElement): () => void {
           h('span', { class: 'n' }, String(d)),
           h('span', { class: 'g' }, gregorianCaption(j)),
         );
-        cell.addEventListener('pointerenter', () => {
+        // Hover preview is for mice; on touch a tap selects the day and the card above shows it.
+        cell.addEventListener('pointerenter', (ev) => {
+          if (ev.pointerType !== 'mouse') return;
           hoverJdn = j;
           showDetail(j);
         });
@@ -164,7 +170,8 @@ export function mountOrreryCalendar(root: HTMLElement): () => void {
           hoverJdn = j;
           showDetail(j);
         });
-        cell.addEventListener('pointerleave', () => {
+        cell.addEventListener('pointerleave', (ev) => {
+          if (ev.pointerType !== 'mouse') return;
           hoverJdn = null;
           showDetail(getState().jdn);
         });
@@ -201,7 +208,7 @@ export function mountOrreryCalendar(root: HTMLElement): () => void {
       h(
         'p',
         { class: 'muted' },
-        'Leap years come from the sky, not a rule. Gold bars are 366-day years, blue are 365. Click a bar to jump to that year.',
+        'Leap years come from the sky, not a rule. Gold bars are 366-day years, blue are 365. Click or tap a bar to jump to that year.',
       ),
     );
     const bars = h('div', { class: 'bars' });
@@ -223,6 +230,9 @@ export function mountOrreryCalendar(root: HTMLElement): () => void {
       bars.append(b);
     }
     lengths.append(bars);
+    // On phones the bars scroll sideways (44px each); keep the current year in view.
+    const cur = bars.querySelector<HTMLElement>('.bar.current');
+    if (cur) bars.scrollLeft = cur.offsetLeft - bars.clientWidth / 2 + cur.offsetWidth / 2;
 
     if (hoverJdn === null || lastYear !== year) {
       hoverJdn = null;

@@ -15,6 +15,12 @@ const LANE_H = 34;
 const AXIS_H = 44;
 const STRIP_H = 36;
 const MS_PER_DAY = 86400000;
+
+interface MarkPt {
+  x: number;
+  y: number;
+  html: string;
+}
 /** Per-lane tints so neighbouring lanes of one family stay distinguishable. */
 const LANE_TINTS = ['X', 'color-mix(in srgb, X 62%, white)', 'color-mix(in srgb, X 70%, #3a2a8a)'];
 
@@ -103,6 +109,8 @@ export function mountTimeline(root: HTMLElement): () => void {
 
   const svgHost = h('div', { class: 'tl-host' });
   const tip = h('div', { class: 'tl-tip', role: 'status', hidden: true });
+  /** Event glyph positions from the last draw, so a tap can hit-test them (a finger is bigger than a glyph). */
+  let markPts: MarkPt[] = [];
   const hint = h('p', { class: 'muted tl-hint' });
   const rangeLabel = h('output', { class: 'tl-range', 'aria-live': 'polite' });
 
@@ -218,6 +226,7 @@ export function mountTimeline(root: HTMLElement): () => void {
     }
 
     // Event strip markers
+    markPts = [];
     const eventsShown: { ev: SkyEvent; cls: string }[] = [];
     for (const g of EVENT_GROUPS) {
       if (!eventOn.has(g.id) || span > g.maxSpan) continue;
@@ -288,6 +297,11 @@ export function mountTimeline(root: HTMLElement): () => void {
       parts.push(
         `<g class="ev-mark ${cls} k-${ev.kind}"><title>${esc(tt)}</title>${markerShape(ev.kind, xx, rowY)}</g>`,
       );
+      markPts.push({
+        x: xx,
+        y: rowY,
+        html: `<strong>${esc(ev.label)}</strong><br>${esc(formatDateTimeUtc(ev.time))}${ev.detail ? `<br><span class="muted">${esc(ev.detail)}</span>` : ''}`,
+      });
       if (cls === 'ev-season' && plotW / span > 0.9) {
         parts.push(
           `<text class="ev-text" x="${xx + 7}" y="${rowY + 4}">${esc(KIND_LABEL[ev.kind])}</text>`,
@@ -347,47 +361,169 @@ export function mountTimeline(root: HTMLElement): () => void {
     return { t, lane, inPlot: px >= L && px <= L + plotW };
   }
 
-  // Drag to pan, click to select.
-  let drag: { x: number; start: number; moved: boolean; id: number } | null = null;
-  svgHost.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0) return;
-    stopAnim?.();
-    stopAnim = null;
-    drag = { x: e.clientX, start, moved: false, id: e.pointerId };
-    svgHost.setPointerCapture(e.pointerId);
-  });
-  svgHost.addEventListener('pointermove', (e) => {
-    if (drag) {
-      const dx = e.clientX - drag.x;
-      if (Math.abs(dx) > 3) drag.moved = true;
-      if (drag.moved) {
-        start = drag.start - (dx / geom().plotW) * span;
-        tip.hidden = true;
-        draw();
-        return;
-      }
-    }
+  // ---- pointer input: mouse drag/hover, one-finger pan, two-finger pinch, tap for a card ----
+  const pointers = new Map<number, { x: number; y: number; touch: boolean }>();
+  let drag: { x: number; start: number; moved: boolean } | null = null;
+  let pinch: { d0: number; span0: number; t0: number } | null = null;
+  /** True from the moment a second finger lands until every finger is up: no tap may fire. */
+  let multi = false;
+  let tapOpen = false;
+
+  const hideTip = () => {
+    tip.hidden = true;
+    tapOpen = false;
+  };
+  const clearHover = () => {
+    hoverT = null;
+    hoverLane = -1;
+  };
+  const tapSlop = (touch: boolean) => (touch ? 9 : 3);
+
+  function pinchPoints(): { mid: { x: number; y: number }; dist: number } | null {
+    const pts = [...pointers.values()];
+    if (pts.length < 2) return null;
+    const [a, b] = pts;
+    return {
+      mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+      dist: Math.max(10, Math.hypot(a.x - b.x, a.y - b.y)),
+    };
+  }
+
+  /** Place the card under the tapped row (or above it near the bottom), clear of the finger. */
+  function placeTip(clientX: number, rowY: number, rowH: number) {
+    const hostRect = svgHost.getBoundingClientRect();
+    tip.hidden = false;
+    const tw = Math.min(tip.offsetWidth || 240, hostRect.width - 8);
+    const th = tip.offsetHeight || 96;
+    const left = Math.min(Math.max(4, clientX - hostRect.left - tw / 2), hostRect.width - tw - 4);
+    let top = rowY + rowH + 6;
+    if (top + th > hostRect.height - 4) top = Math.max(4, rowY - th - 6);
+    tip.style.left = `${left}px`;
+    tip.style.top = `${top}px`;
+  }
+
+  const closeBtn = () => {
+    const b = h('button', { type: 'button', class: 'tl-tip-x', 'aria-label': 'Close card' }, '×');
+    b.addEventListener('click', () => {
+      hideTip();
+      clearHover();
+      draw();
+    });
+    return b;
+  };
+
+  /** What a tap on the timeline means: the nearest sky event, or the date in that lane. */
+  function showTapCard(e: PointerEvent) {
     const p = pointerT(e);
     const ls = lanes();
-    if (!p.inPlot || p.lane < -1 || p.lane >= ls.length) {
-      hoverT = null;
-      hoverLane = -1;
-      tip.hidden = true;
-      draw();
+    const r = svgHost.getBoundingClientRect();
+    const px = e.clientX - r.left;
+    const py = e.clientY - r.top;
+    let best: MarkPt | null = null;
+    let bestD = 28;
+    for (const m of markPts) {
+      const d = Math.hypot(m.x - px, m.y - py);
+      if (d < bestD) {
+        best = m;
+        bestD = d;
+      }
+    }
+    if (best) {
+      tip.innerHTML = best.html;
+      tip.prepend(closeBtn());
+      tapOpen = true;
+      placeTip(e.clientX, best.y - 8, 16);
+      return;
+    }
+    if (!p.inPlot || p.lane < 0 || p.lane >= ls.length) {
+      hideTip();
       return;
     }
     hoverT = p.t;
     hoverLane = p.lane;
-    const jdn = Math.floor(p.t);
+    tip.innerHTML = laneCardHtml(ls[p.lane], Math.floor(p.t));
+    tip.prepend(closeBtn());
+    tapOpen = true;
+    placeTip(e.clientX, AXIS_H + STRIP_H + p.lane * laneH(), laneH());
+  }
+
+  function laneCardHtml(cal: Calendar | null, jdn: number): string {
     const lines: string[] = [];
-    if (p.lane >= 0) {
-      const cal = ls[p.lane];
+    if (cal) {
       const d = cal.fromJDN(jdn);
       lines.push(`<strong>${esc(cal.name)}</strong>`, esc(d.label));
       if (d.extra) lines.push(`<span class="muted">${esc(d.extra)}</span>`);
     }
     lines.push(`<span class="muted">${esc(describeGregorian(jdn))}</span>`);
-    tip.innerHTML = lines.join('<br>');
+    return lines.join('<br>');
+  }
+
+  svgHost.addEventListener('pointerdown', (e) => {
+    const touch = e.pointerType !== 'mouse';
+    if (!touch && e.button !== 0) return;
+    stopAnim?.();
+    stopAnim = null;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, touch });
+    svgHost.setPointerCapture(e.pointerId);
+    if (pointers.size === 1) {
+      multi = false;
+      drag = { x: e.clientX, start, moved: false };
+      return;
+    }
+    // A second finger turns the gesture into a pinch; the pair's midpoint stays pinned to its date.
+    multi = true;
+    drag = null;
+    const pp = pinchPoints();
+    if (!pp) return;
+    const rect = svgHost.getBoundingClientRect();
+    const { L, plotW } = geom();
+    pinch = {
+      d0: pp.dist,
+      span0: span,
+      t0: start + ((pp.mid.x - rect.left - L) / plotW) * span,
+    };
+    hideTip();
+    clearHover();
+  });
+  svgHost.addEventListener('pointermove', (e) => {
+    const known = pointers.get(e.pointerId);
+    if (known) {
+      known.x = e.clientX;
+      known.y = e.clientY;
+    }
+    if (pinch) {
+      const pp = pinchPoints();
+      if (!pp) return;
+      const rect = svgHost.getBoundingClientRect();
+      const { L, plotW } = geom();
+      span = Math.min(MAX_SPAN, Math.max(MIN_SPAN, (pinch.span0 * pinch.d0) / pp.dist));
+      start = pinch.t0 - ((pp.mid.x - rect.left - L) / plotW) * span;
+      draw();
+      return;
+    }
+    if (drag) {
+      const dx = e.clientX - drag.x;
+      if (Math.abs(dx) > tapSlop(known?.touch ?? false)) drag.moved = true;
+      if (drag.moved) {
+        start = drag.start - (dx / geom().plotW) * span;
+        hideTip();
+        clearHover();
+        draw();
+        return;
+      }
+    }
+    if (e.pointerType !== 'mouse') return; // touch has no hover: a tap shows the card instead
+    const p = pointerT(e);
+    const ls = lanes();
+    if (!p.inPlot || p.lane < -1 || p.lane >= ls.length) {
+      clearHover();
+      hideTip();
+      draw();
+      return;
+    }
+    hoverT = p.t;
+    hoverLane = p.lane;
+    tip.innerHTML = laneCardHtml(p.lane >= 0 ? ls[p.lane] : null, Math.floor(p.t));
     tip.hidden = false;
     const hostRect = svgHost.getBoundingClientRect();
     const tx = Math.min(e.clientX - hostRect.left + 14, hostRect.width - 230);
@@ -395,22 +531,38 @@ export function mountTimeline(root: HTMLElement): () => void {
     tip.style.top = `${e.clientY - hostRect.top + 18}px`;
     draw();
   });
-  svgHost.addEventListener('pointerup', (e) => {
+  const release = (e: PointerEvent, cancelled: boolean) => {
+    const wasTouch = pointers.get(e.pointerId)?.touch ?? false;
+    pointers.delete(e.pointerId);
+    if (svgHost.hasPointerCapture(e.pointerId)) svgHost.releasePointerCapture(e.pointerId);
+    if (pointers.size < 2) pinch = null;
+    if (pointers.size > 0) return;
     const d = drag;
     drag = null;
-    if (svgHost.hasPointerCapture(e.pointerId)) svgHost.releasePointerCapture(e.pointerId);
-    if (d && !d.moved) {
-      const p = pointerT(e);
-      if (p.inPlot) setDate(Math.floor(p.t));
-    }
-  });
-  svgHost.addEventListener('pointerleave', () => {
-    if (drag) return;
-    hoverT = null;
-    hoverLane = -1;
-    tip.hidden = true;
+    const wasMulti = multi;
+    multi = false;
+    if (cancelled || wasMulti || !d || d.moved) return;
+    const p = pointerT(e);
+    if (!p.inPlot) return;
+    setDate(Math.floor(p.t));
+    if (wasTouch) showTapCard(e);
+  };
+  svgHost.addEventListener('pointerup', (e) => release(e, false));
+  svgHost.addEventListener('pointercancel', (e) => release(e, true));
+  svgHost.addEventListener('pointerleave', (e) => {
+    if (drag || e.pointerType !== 'mouse') return;
+    clearHover();
+    hideTip();
     draw();
   });
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && tapOpen) {
+      hideTip();
+      clearHover();
+      draw();
+    }
+  };
+  window.addEventListener('keydown', onKey);
   svgHost.addEventListener(
     'wheel',
     (e) => {
@@ -426,19 +578,19 @@ export function mountTimeline(root: HTMLElement): () => void {
   );
 
   // Controls
-  const btn = (label: string, aria: string, fn: () => void) =>
+  const btn = (label: string, aria: string, fn: () => void, cls = '') =>
     h(
       'button',
-      { type: 'button', class: 'btn', 'aria-label': aria, title: aria, onclick: fn },
+      { type: 'button', class: `btn ${cls}`.trim(), 'aria-label': aria, title: aria, onclick: fn },
       label,
     );
   const controls = h(
     'div',
     { class: 'tl-controls glass', role: 'group', 'aria-label': 'Timeline window' },
-    btn('<', 'Pan earlier', () => pan(-span / 4)),
-    btn('>', 'Pan later', () => pan(span / 4)),
-    btn('+', 'Zoom in', () => zoom(1 / 1.5)),
-    btn('-', 'Zoom out', () => zoom(1.5)),
+    btn('<', 'Pan earlier', () => pan(-span / 4), 'step-btn'),
+    btn('>', 'Pan later', () => pan(span / 4), 'step-btn'),
+    btn('+', 'Zoom in', () => zoom(1 / 1.5), 'step-btn'),
+    btn('-', 'Zoom out', () => zoom(1.5), 'step-btn'),
     btn('Month', 'Show 45 days around the selected date', () => {
       centerOnSelected(45);
     }),
@@ -448,11 +600,16 @@ export function mountTimeline(root: HTMLElement): () => void {
     btn('10 years', 'Show ten years around the selected date', () => {
       centerOnSelected(3653);
     }),
-    btn('Center on date', 'Center the window on the selected date', () => centerOnSelected()),
-    btn('Gregorian year', 'Show the whole Gregorian year of the selected date', () => {
-      const y = jdnToGregorian(getState().jdn).year;
-      setWindow(gregorianToJDN(y, 1, 1), 365.25);
-    }),
+    btn('Center', 'Center the window on the selected date', () => centerOnSelected()),
+    btn(
+      'Gregorian year',
+      'Show the whole Gregorian year of the selected date',
+      () => {
+        const y = jdnToGregorian(getState().jdn).year;
+        setWindow(gregorianToJDN(y, 1, 1), 365.25);
+      },
+      'tl-wide-only',
+    ),
     rangeLabel,
   );
 
@@ -508,7 +665,9 @@ export function mountTimeline(root: HTMLElement): () => void {
       h(
         'p',
         { class: 'view-intro', 'data-reveal': '', 'data-i': '1' },
-        'Each lane is a calendar. Drag to pan, scroll to zoom, click to pick a day. Heavy lines mark where a calendar starts a new year.',
+        matchMedia('(hover: none)').matches
+          ? 'Each lane is a calendar. Drag sideways to pan, pinch to zoom, tap a day for its date in that calendar. Heavy lines mark where a calendar starts a new year.'
+          : 'Each lane is a calendar. Drag to pan, scroll to zoom, click to pick a day. Heavy lines mark where a calendar starts a new year.',
       ),
       controls,
       h('div', { class: 'tl-wrap' }, svgHost, tip),
@@ -532,6 +691,7 @@ export function mountTimeline(root: HTMLElement): () => void {
   return () => {
     ro.disconnect();
     unsub();
+    window.removeEventListener('keydown', onKey);
   };
 }
 

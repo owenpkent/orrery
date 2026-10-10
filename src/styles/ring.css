@@ -18,7 +18,36 @@
 }
 
 .ring-host {
+  position: relative;
   line-height: 0;
+}
+
+/* Earth's touch handle. It is the only part of the ring with touch-action: none. */
+.ring-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 2;
+  width: 64px;
+  height: 64px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  touch-action: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ring-handle {
+    pointer-events: none;
+  }
+}
+
+.ring-tip {
+  min-height: 3.2em;
+  padding: 10px 14px 6px;
+  font-size: 0.92rem;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--text);
 }
 
 .ring-svg {
@@ -26,9 +55,10 @@
   width: 100%;
   height: auto;
   max-height: 82vh;
+  max-height: 82svh;
   margin-inline: auto;
   font-family: var(--font-ui);
-  touch-action: none;
+  touch-action: pan-y;
   user-select: none;
   cursor: crosshair;
 }
@@ -81,15 +111,21 @@
   stroke-width: 2.2;
 }
 
-.rg:hover .seg.even {
-  fill: color-mix(in srgb, var(--fam) 26%, transparent);
+@media (hover: hover) {
+  .rg:hover .seg.even {
+    fill: color-mix(in srgb, var(--fam) 26%, transparent);
+  }
 }
-.rg:hover .seg.odd {
-  fill: color-mix(in srgb, var(--fam) 52%, transparent);
+@media (hover: hover) {
+  .rg:hover .seg.odd {
+    fill: color-mix(in srgb, var(--fam) 52%, transparent);
+  }
 }
-.rg .seg:hover {
-  fill: color-mix(in srgb, var(--fam) 72%, transparent);
-  filter: drop-shadow(0 0 6px var(--fam));
+@media (hover: hover) {
+  .rg .seg:hover {
+    fill: color-mix(in srgb, var(--fam) 72%, transparent);
+    filter: drop-shadow(0 0 6px var(--fam));
+  }
 }
 
 .seg-text {
@@ -107,8 +143,10 @@
   transition: opacity 0.3s;
 }
 
-.rg:hover .ring-name {
-  opacity: 1;
+@media (hover: hover) {
+  .rg:hover .ring-name {
+    opacity: 1;
+  }
 }
 
 .cardinal {
@@ -183,9 +221,14 @@
   transform-origin: center;
 }
 
-.earth-g:hover .earth,
 .ring-svg.dragging .earth {
   transform: scale(1.22);
+}
+
+@media (hover: hover) {
+  .earth-g:hover .earth {
+    transform: scale(1.22);
+  }
 }
 
 .earth-focus {
