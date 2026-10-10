@@ -1,0 +1,36 @@
+/* Loaded last, so these overrides beat the per-view stylesheets. */
+/* ---- phones and other touch-first screens: keep scrolling smooth ----
+   Large blurred layers, mix-blend grain and dozens of backdrop filters are what make long pages
+   janky on mobile GPUs. The look stays; the expensive ways of getting it do not. */
+@media (max-width: 760px), (hover: none) and (pointer: coarse) {
+  :root {
+    --glass-blur: 10px;
+  }
+  .aurora i {
+    filter: none;
+  }
+  .grain {
+    mix-blend-mode: normal;
+    opacity: calc(var(--grain-opacity) * 0.45);
+  }
+  .card.glass,
+  .bento-card.glass,
+  .orr-month.glass,
+  .panel.glass,
+  .tl-wrap,
+  .tl-controls.glass {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: var(--glass), color-mix(in srgb, var(--bg-2) 72%, transparent);
+  }
+  .glass::after,
+  .panel::after {
+    display: none;
+  }
+  .mini-month i.w {
+    animation: none;
+  }
+  .orr-day.today {
+    animation: none;
+  }
+}

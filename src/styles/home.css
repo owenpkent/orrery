@@ -59,17 +59,31 @@
 }
 
 .live-dot {
+  position: relative;
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: #5ef2b0;
-  box-shadow: 0 0 0 0 rgba(94, 242, 176, 0.6);
+}
+
+/* The ripple animates transform and opacity only, so it never repaints. */
+.live-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: #5ef2b0;
   animation: ping 2.4s ease-out infinite;
 }
 
 @keyframes ping {
+  from {
+    transform: scale(1);
+    opacity: 0.6;
+  }
   to {
-    box-shadow: 0 0 0 10px rgba(94, 242, 176, 0);
+    transform: scale(3.2);
+    opacity: 0;
   }
 }
 
@@ -590,6 +604,15 @@
   animation: spin calc(14s + var(--k) * 6s) linear infinite;
 }
 
+.mini-ring i {
+  will-change: transform;
+}
+
+/* Cards below the fold do not animate until they are revealed. */
+.bento-card:not(.in) .mini-ring i {
+  animation-play-state: paused;
+}
+
 .mini-ring i:nth-child(even) {
   animation-direction: reverse;
 }
@@ -732,4 +755,8 @@
   .wrap-wide {
     width: calc(100% - 24px - var(--safe-left) - var(--safe-right));
   }
+}
+
+.hero-sub {
+  text-shadow: 0 0 14px color-mix(in srgb, var(--bg) 85%, transparent);
 }

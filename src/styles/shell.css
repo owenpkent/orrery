@@ -484,42 +484,6 @@
   }
 }
 
-/* ---- phones and other touch-first screens: keep scrolling smooth ----
-   Large blurred layers, mix-blend grain and dozens of backdrop filters are what make long pages
-   janky on mobile GPUs. The look stays; the expensive ways of getting it do not. */
-@media (max-width: 760px), (hover: none) and (pointer: coarse) {
-  :root {
-    --glass-blur: 10px;
-  }
-  .aurora i {
-    filter: none;
-  }
-  .grain {
-    mix-blend-mode: normal;
-    opacity: calc(var(--grain-opacity) * 0.45);
-  }
-  .card.glass,
-  .bento-card.glass,
-  .orr-month.glass,
-  .panel.glass,
-  .tl-wrap,
-  .tl-controls.glass {
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-    background: var(--glass), color-mix(in srgb, var(--bg-2) 72%, transparent);
-  }
-  .glass::after,
-  .panel::after {
-    display: none;
-  }
-  .mini-month i.w {
-    animation: none;
-  }
-  .orr-day.today {
-    animation: none;
-  }
-}
-
 @media (max-width: 480px) {
   .brand {
     padding: 0 4px 0 6px;
@@ -540,5 +504,33 @@
   }
   .theme-btn {
     flex: none;
+  }
+}
+
+/* ---- landscape phones: a one-row dock, so it does not eat a quarter of the screen ---- */
+@media (max-height: 520px) and (pointer: coarse) {
+  :root {
+    --dock-h: calc(80px + var(--safe-bottom));
+  }
+  .date-control {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    padding: 6px 14px;
+    border-radius: 22px;
+  }
+  .dc-row {
+    flex: 0 1 auto;
+  }
+  .dc-scrub {
+    flex: 1 1 200px;
+    margin-top: 0;
+  }
+  .date-control.open .dc-row {
+    flex-basis: 100%;
+  }
+  .hero {
+    padding-bottom: calc(var(--dock-h) + 16px);
   }
 }

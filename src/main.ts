@@ -7,23 +7,42 @@ import './styles/today.css';
 import './styles/timeline.css';
 import './styles/ring.css';
 import './styles/orrery.css';
+import './styles/mobile.css';
 import { VIEWS, getState, readHash, setView, subscribe, type ViewId } from './state';
 import { createDateControl } from './ui/dateControl';
 import { clear, h } from './ui/dom';
 import { initSpotlight, reveal, transition } from './ui/fx';
 import { mountHome } from './views/home';
-import { mountToday } from './views/today';
-import { mountTimeline } from './views/timeline';
-import { mountRing } from './views/ring';
-import { mountOrreryCalendar } from './views/orreryCalendar';
 
-const MOUNTS: Record<ViewId, (root: HTMLElement) => () => unknown> = {
-  home: mountHome,
-  today: mountToday,
-  timeline: mountTimeline,
-  ring: mountRing,
-  orrery: mountOrreryCalendar,
+type Mount = (root: HTMLElement) => () => unknown;
+
+/** Home is in the main bundle (it is the landing page); the other views load on demand. */
+const LOADERS: Record<ViewId, () => Promise<Mount>> = {
+  home: () => Promise.resolve(mountHome),
+  today: () => import('./views/today').then((m) => m.mountToday),
+  timeline: () => import('./views/timeline').then((m) => m.mountTimeline),
+  ring: () => import('./views/ring').then((m) => m.mountRing),
+  orrery: () => import('./views/orreryCalendar').then((m) => m.mountOrreryCalendar),
 };
+const loaded = new Map<ViewId, Mount>([['home', mountHome]]);
+
+function load(view: ViewId): Promise<Mount> {
+  return LOADERS[view]().then((m) => {
+    loaded.set(view, m);
+    return m;
+  });
+}
+
+/** Warm the other views once the page is idle, so tabs open instantly and view transitions stay smooth. */
+function prefetchViews(): void {
+  const queue = VIEWS.map((v) => v.id).filter((id) => !loaded.has(id));
+  const next = () => {
+    const id = queue.shift();
+    if (!id) return;
+    void load(id).finally(() => window.setTimeout(next, 250));
+  };
+  window.addEventListener('load', () => window.setTimeout(next, 2500), { once: true });
+}
 
 type Theme = 'dark' | 'light';
 
@@ -170,6 +189,7 @@ function boot(): void {
     if (view === current) return;
     current = view;
     teardown?.();
+    teardown = null;
     stopReveal?.();
     clear(main);
     document.body.dataset.view = view;
@@ -178,9 +198,19 @@ function boot(): void {
       root = h('div', { class: 'wrap' });
       main.append(root);
     }
-    teardown = MOUNTS[view](root);
-    stopReveal = reveal(main);
-    window.scrollTo({ top: 0 });
+    const mountNow = (mount: Mount) => {
+      teardown = mount(root);
+      stopReveal = reveal(main);
+      window.scrollTo({ top: 0 });
+    };
+    const ready = loaded.get(view);
+    if (ready) mountNow(ready);
+    else {
+      // First visit to a lazily loaded view: mount as soon as its chunk arrives (unless the user moved on).
+      void load(view).then((mount) => {
+        if (current === view && teardown === null) mountNow(mount);
+      });
+    }
   };
   subscribe(show);
   window.addEventListener('hashchange', () => {
@@ -202,4 +232,5 @@ function registerServiceWorker(): void {
 }
 
 boot();
+prefetchViews();
 registerServiceWorker();
